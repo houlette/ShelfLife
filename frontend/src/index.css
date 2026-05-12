@@ -1,0 +1,128 @@
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  /* Library theme (default) — warmer parchment with deep green/burgundy accents */
+  --bg: #ebe2cf;
+  --paper: #f4ecd8;
+  --surface: #e1d6bb;
+  --line: #c9bca0;
+  --line-soft: #d8caaf;
+  --ink: #1a1410;
+  --ink-soft: #34281f;
+  --muted: #6f6253;
+  --muted-2: #8f8270;
+  --accent: #6b1f1f;        /* leather burgundy */
+  --accent-2: #2c4d3f;      /* deep forest */
+  --accent-3: #886434;      /* old gold */
+  --hi: #c19342;            /* brass */
+  /* Rating scale (1–5) */
+  --m1: #8b3a37;            /* 1 star */
+  --m2: #b86a4f;            /* 2 stars */
+  --m3: #c8a04a;            /* 3 stars */
+  --m4: #7e9764;            /* 4 stars */
+  --m5: #3f6e57;            /* 5 stars */
+  --shadow: 0 1px 0 rgba(45, 32, 18, 0.06), 0 8px 24px -16px rgba(45, 32, 18, 0.18);
+}
+
+[data-theme="midnight"] {
+  /* Library midnight — like reading by an oil lamp */
+  --bg: #100d0a;
+  --paper: #18140f;
+  --surface: #201a13;
+  --line: #2c241b;
+  --line-soft: #221c14;
+  --ink: #ede2c8;
+  --ink-soft: #d2c4a6;
+  --muted: #8a7d65;
+  --muted-2: #6b6150;
+  --accent: #c75a5a;        /* faded burgundy */
+  --accent-2: #87b89d;      /* sage */
+  --accent-3: #d4a14a;      /* warm gold */
+  --hi: #e6c378;
+  --m1: #b04a47;
+  --m2: #d18260;
+  --m3: #e0b85c;
+  --m4: #9bb47e;
+  --m5: #5fa685;
+  --shadow: 0 1px 0 rgba(0,0,0,0.4), 0 12px 32px -16px rgba(0,0,0,0.6);
+}
+
+[data-theme="clinic"] {
+  /* Library "study" — clean parchment, deep green ink */
+  --bg: #f3efe5;
+  --paper: #fbf8ee;
+  --surface: #f6f1e3;
+  --line: #ddd5c1;
+  --line-soft: #ebe5d3;
+  --ink: #1b1a14;
+  --ink-soft: #2f2c23;
+  --muted: #6f6957;
+  --muted-2: #97917f;
+  --accent: #4a2c2c;        /* dark leather */
+  --accent-2: #355a47;      /* forest */
+  --accent-3: #8a6531;      /* old gold */
+  --hi: #b8893a;
+  --m1: #893a40;
+  --m2: #b67557;
+  --m3: #c2974a;
+  --m4: #6f8d68;
+  --m5: #2f6e58;
+  --shadow: 0 1px 0 rgba(0,0,0,0.04), 0 6px 18px -10px rgba(0,0,0,0.12);
+}
+
+/* ─── Reset + base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+}
+
+button { font-family: inherit; }
+a { color: var(--accent); }
+a.book-link { color: inherit; text-decoration: none; }
+a.book-link:hover { text-decoration: underline; text-decoration-color: var(--muted); }
+::selection { background: var(--accent); color: var(--paper); }
+
+#root { min-height: 100vh; }
+
+/* ─── Typography classes ────────────────────────────────────────────────── */
+.serif {
+  font-family: "Spectral", "Iowan Old Style", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+}
+
+.mono {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-feature-settings: "tnum", "zero";
+}
+
+.num {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-feature-settings: "tnum", "zero";
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ─── Layout helpers ────────────────────────────────────────────────────── */
+.rule      { height: 1px; background: var(--line); width: 100%; }
+.rule-soft { height: 1px; background: var(--line-soft); width: 100%; }
+
+/* ─── Scrollbars ────────────────────────────────────────────────────────── */
+*::-webkit-scrollbar        { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb  { background: var(--line); border-radius: 6px; }
+*::-webkit-scrollbar-track  { background: transparent; }

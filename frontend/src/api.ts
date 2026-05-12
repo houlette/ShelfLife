@@ -1,0 +1,51 @@
+import type { Book, Summary, AuthorStat, ShelfData, RatingBucket, IngestStatus, Insight, GenreStat, EnrichStatus, Recommendation, DiscoveryCandidate } from './types'
+
+const BASE = '/api'
+
+async function get<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(BASE + path, window.location.origin)
+  if (params) Object.entries(params).forEach(([k, v]) => v && url.searchParams.set(k, v))
+  const res = await fetch(url.toString())
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+export const api = {
+  health: () => get<{ status: string }>('/health'),
+
+  books: () => get<Book[]>('/metrics/books'),
+  summary: () => get<Summary>('/metrics/summary'),
+  authors: () => get<AuthorStat[]>('/metrics/authors'),
+  shelves: () => get<ShelfData>('/metrics/shelves'),
+  ratingDistribution: () => get<RatingBucket[]>('/metrics/rating-distribution'),
+
+  ingestStatus: () => get<IngestStatus>('/ingest/status'),
+  uploadGoodreads: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetch(`${BASE}/ingest/goodreads`, { method: 'POST', body: fd }).then(r => r.json())
+  },
+
+  insights: (period = 'recent') => get<Insight>(`/insights/summary?period=${period}`),
+
+  genres: () => get<GenreStat[]>('/metrics/genres'),
+  recommendations: (limit = 50) => get<Recommendation[]>('/metrics/recommendations', { limit: String(limit) }),
+  enrichStatus: () => get<EnrichStatus>('/ingest/enrich/status'),
+  enrichLibrary: () =>
+    fetch(`${BASE}/ingest/enrich`, { method: 'POST' }).then(r => r.json()),
+
+  cfStatus: () => get<{ ratings_loaded: number; books_covered: number; similarity_pairs: number }>('/ingest/cf-status'),
+  cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST' }).then(r => r.json()),
+
+  discover: {
+    list: (source?: string) =>
+      get<DiscoveryCandidate[]>('/discover', source ? { source } : undefined),
+    refresh: () =>
+      fetch(`${BASE}/discover/refresh`, { method: 'POST' }).then(r => r.json()),
+    dismiss: (id: number) =>
+      fetch(`${BASE}/discover/${id}/dismiss`, { method: 'POST' }).then(r => r.json()),
+    addToShelf: (id: number) =>
+      fetch(`${BASE}/discover/${id}/add-to-shelf`, { method: 'POST' }).then(r => r.json()),
+  },
+}
+

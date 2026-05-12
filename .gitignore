@@ -1,0 +1,22 @@
+# Environment
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Data (large files, personal reading data)
+data/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store

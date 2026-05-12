@@ -1,0 +1,121 @@
+from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Book(Base):
+    __tablename__ = "books"
+
+    id = Column(Integer, primary_key=True)
+    goodreads_book_id = Column(Integer, unique=True, nullable=False)
+    title = Column(Text, nullable=False)
+    author = Column(String(255))
+    author_lf = Column(String(255))
+    additional_authors = Column(Text)
+    isbn = Column(String(20))
+    isbn13 = Column(String(20))
+    my_rating = Column(Integer, default=0)
+    average_rating = Column(Float)
+    publisher = Column(String(255))
+    binding = Column(String(50))
+    num_pages = Column(Integer)
+    year_published = Column(Integer)
+    original_pub_year = Column(Integer)
+    date_read = Column(Date)
+    date_added = Column(Date)
+    exclusive_shelf = Column(String(50))
+    bookshelves = Column(Text)
+    my_review = Column(Text)
+    private_notes = Column(Text)
+    read_count = Column(Integer, default=1)
+    owned_copies = Column(Integer, default=0)
+
+    # Enriched from Open Library
+    cover_url = Column(Text)
+    genre = Column(String(50))            # normalized bucket
+    subjects_json = Column(Text)          # raw OL subjects (JSON array)
+    ol_avg_rating = Column(Float)
+    ol_ratings_count = Column(Integer)
+    ol_work_key = Column(String(50))
+    enriched_at = Column(DateTime)
+
+
+class ExternalRating(Base):
+    """Ratings sourced from public datasets (Goodbooks-10k, etc.) used for
+    collaborative filtering. Resolved to our local Book.id at ingest time."""
+    __tablename__ = "external_ratings"
+
+    id = Column(Integer, primary_key=True)
+    source = Column(String(50), nullable=False, index=True)
+    ext_user_id = Column(Integer, nullable=False)
+    book_id = Column(Integer, nullable=False, index=True)  # FK to Book.id
+    rating = Column(Float, nullable=False)  # normalized to 1-5 scale
+
+
+class BookSimilarity(Base):
+    """Precomputed item-item similarity, used by CF predictor."""
+    __tablename__ = "book_similarity"
+
+    id = Column(Integer, primary_key=True)
+    book_a_id = Column(Integer, nullable=False, index=True)
+    book_b_id = Column(Integer, nullable=False)
+    similarity = Column(Float, nullable=False)
+    n_co_raters = Column(Integer, nullable=False)
+
+
+class BookReviewAgg(Base):
+    """Aggregated review text per book, used by the content-text predictor."""
+    __tablename__ = "book_review_agg"
+
+    book_id = Column(Integer, primary_key=True)  # FK to Book.id
+    n_reviews = Column(Integer, nullable=False)
+    avg_rating = Column(Float)
+    text = Column(Text, nullable=False)
+
+
+class DiscoveryCandidate(Base):
+    """Books surfaced by the discovery pipeline (not yet on the user's shelf)."""
+    __tablename__ = "discovery_candidates"
+
+    id = Column(Integer, primary_key=True)
+    ol_work_key = Column(String(50), unique=True, nullable=False)
+    title = Column(Text, nullable=False)
+    author = Column(String(255))
+
+    # Which generator found it, and why
+    source = Column(String(20), nullable=False)   # "author" | "subject" | "similarity"
+    source_evidence = Column(Text)                # JSON: {"author": "George Saunders"}
+
+    # Enrichment (mirrors Book's OL columns)
+    cover_url = Column(Text)
+    genre = Column(String(50))
+    subjects_json = Column(Text)
+    ol_avg_rating = Column(Float)
+    ol_ratings_count = Column(Integer)
+    original_pub_year = Column(Integer)
+
+    # Scoring (cached)
+    score = Column(Float)
+    breakdown_json = Column(Text)
+    reason = Column(Text)
+
+    # Lifecycle
+    status = Column(String(20), default="new")    # "new" | "dismissed" | "added"
+    created_at = Column(DateTime)
+    scored_at = Column(DateTime)
+
+
+class IngestLog(Base):
+    __tablename__ = "ingest_log"
+
+    id = Column(Integer, primary_key=True)
+    source = Column(String(50), nullable=False)
+    filename = Column(String(255))
+    records_inserted = Column(Integer)
+    records_updated = Column(Integer)
+    ingested_at = Column(DateTime, nullable=False)
+    status = Column(String(20))
+    message = Column(Text)
