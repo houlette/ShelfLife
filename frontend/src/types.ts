@@ -115,6 +115,24 @@ export interface DiscoveryCandidate {
   status: 'new' | 'dismissed' | 'added'
 }
 
+export interface BooklistPendingEntry {
+  id: number
+  booklist_index: number
+  title: string
+  author: string | null
+  category: string | null
+  read_flag: string | null
+  candidates: Array<{
+    id: number
+    title: string
+    author: string | null
+    cover_url: string | null
+    exclusive_shelf: string | null
+    original_pub_year: number | null
+    my_rating: number
+  }>
+}
+
 export interface Recommendation {
   book: Book
   score: number

@@ -33,6 +33,8 @@ class Book(Base):
     read_count = Column(Integer, default=1)
     owned_copies = Column(Integer, default=0)
 
+    booklist_id = Column(Integer)          # Index from personal book-ownership sheet
+
     # Enriched from Open Library
     cover_url = Column(Text)
     genre = Column(String(50))            # normalized bucket
@@ -106,6 +108,27 @@ class DiscoveryCandidate(Base):
     status = Column(String(20), default="new")    # "new" | "dismissed" | "added"
     created_at = Column(DateTime)
     scored_at = Column(DateTime)
+
+
+class BooklistPending(Base):
+    """Sheet rows that had a title match in the DB but no confident author match.
+    The user resolves each one: merge into an existing book, insert as new, or dismiss."""
+    __tablename__ = "booklist_pending"
+
+    id = Column(Integer, primary_key=True)
+    booklist_index = Column(Integer, nullable=False, unique=True)
+
+    # Verbatim sheet fields — applied on resolution
+    title = Column(Text, nullable=False)
+    author = Column(String(255))
+    author_lf = Column(String(255))
+    read_flag = Column(String(10))
+    category = Column(String(50))
+    subcategory = Column(String(50))
+
+    candidate_book_ids = Column(Text)  # JSON list of Book.id to compare against
+    status = Column(String(20), default="pending")  # "pending" (others reserved)
+    created_at = Column(DateTime)
 
 
 class IngestLog(Base):
