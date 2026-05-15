@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db.database import get_db
-from db.models import Book, IngestLog
+from db.models import Book, BooklistPending, IngestLog
 import ingest.goodreads as goodreads_ingest
+import ingest.booklist as booklist_ingest
 import ingest.openlibrary as ol
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
@@ -36,6 +37,101 @@ async def upload_goodreads(file: UploadFile = File(...), db: Session = Depends(g
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@router.post("/booklist")
+async def upload_booklist(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    if not file.filename or not file.filename.endswith(".csv"):
+        raise HTTPException(400, "Expected a .csv file")
+    content = await file.read()
+    try:
+        result = booklist_ingest.ingest_csv(content, db)
+        _log(db, "booklist", file.filename, result)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.get("/booklist/pending")
+def booklist_pending(db: Session = Depends(get_db)):
+    """Return unresolved pending entries with candidate book details for disambiguation UI."""
+    import json as _json
+    entries = db.query(BooklistPending).filter(BooklistPending.status == "pending").all()
+    result = []
+    for entry in entries:
+        candidate_ids: list[int] = _json.loads(entry.candidate_book_ids or "[]")
+        candidates = []
+        for book in db.query(Book).filter(Book.id.in_(candidate_ids)).all():
+            candidates.append({
+                "id": book.id,
+                "title": book.title,
+                "author": book.author,
+                "cover_url": book.cover_url,
+                "exclusive_shelf": book.exclusive_shelf,
+                "original_pub_year": book.original_pub_year,
+                "my_rating": book.my_rating,
+            })
+        result.append({
+            "id": entry.id,
+            "booklist_index": entry.booklist_index,
+            "title": entry.title,
+            "author": entry.author,
+            "category": entry.category,
+            "read_flag": entry.read_flag,
+            "candidates": candidates,
+        })
+    return result
+
+
+@router.post("/booklist/pending/{pending_id}/resolve")
+def resolve_pending(
+    pending_id: int,
+    action: str,
+    book_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Resolve a pending disambiguation entry.
+
+    action="merge"       — mark book_id as owned; requires book_id
+    action="insert"      — insert the sheet row as a new book
+    action="dismiss"     — discard the pending entry without inserting
+    """
+    entry = db.query(BooklistPending).filter(BooklistPending.id == pending_id).first()
+    if not entry:
+        raise HTTPException(404, "Pending entry not found")
+
+    if action == "merge":
+        if book_id is None:
+            raise HTTPException(400, "book_id required for merge action")
+        book = db.query(Book).filter(Book.id == book_id).first()
+        if not book:
+            raise HTTPException(404, f"Book {book_id} not found")
+        book.owned_copies = 1
+        book.booklist_id = entry.booklist_index
+        entry.status = "merged"
+
+    elif action == "insert":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        book_entry = booklist_ingest._book_entry_from_pending(entry)
+        stmt = (
+            sqlite_insert(Book)
+            .values(**book_entry)
+            .on_conflict_do_update(
+                index_elements=["goodreads_book_id"],
+                set_={k: v for k, v in book_entry.items() if k != "goodreads_book_id"},
+            )
+        )
+        db.execute(stmt)
+        entry.status = "inserted"
+
+    elif action == "dismiss":
+        entry.status = "dismissed"
+
+    else:
+        raise HTTPException(400, f"Unknown action: {action!r}")
+
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/enrich")

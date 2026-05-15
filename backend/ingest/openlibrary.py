@@ -107,6 +107,9 @@ def reclassify_all(db: Session) -> dict[str, Any]:
     return {"reclassified": changed, "total_with_subjects": len(books)}
 
 
+_FIELDS_WITH_ISBN = FIELDS + ",isbn"
+
+
 def _fetch(isbn: str) -> dict[str, Any] | None:
     try:
         r = requests.get(
@@ -114,6 +117,21 @@ def _fetch(isbn: str) -> dict[str, Any] | None:
             params={"q": f"isbn:{isbn}", "limit": 1, "fields": FIELDS},
             timeout=10,
         )
+        r.raise_for_status()
+        docs = r.json().get("docs", [])
+        return docs[0] if docs else None
+    except Exception:
+        return None
+
+
+def _fetch_by_title_author(title: str, author: str | None) -> dict[str, Any] | None:
+    """Search OL by title + author for books that have no ISBN.
+    Returns the top doc (with isbn field included) or None."""
+    params: dict[str, Any] = {"title": title, "limit": 1, "fields": _FIELDS_WITH_ISBN}
+    if author:
+        params["author"] = author
+    try:
+        r = requests.get(OL_SEARCH, params=params, timeout=10)
         r.raise_for_status()
         docs = r.json().get("docs", [])
         return docs[0] if docs else None
@@ -156,12 +174,15 @@ def enrich_book(book: Book, doc: dict[str, Any]) -> bool:
 
 def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = None,
                rate_per_sec: float = 5.0) -> dict[str, Any]:
-    """Iterate books with ISBNs and enrich from Open Library.
-    Rate-limited to be polite to the OL API."""
-    q = db.query(Book).filter(
-        ((Book.isbn13 != None) & (Book.isbn13 != "")) |
-        ((Book.isbn != None) & (Book.isbn != ""))
-    )
+    """Enrich books from Open Library.
+
+    For books with ISBN: query by ISBN (fast, precise).
+    For books without ISBN (e.g. sheet-only imports): query by title + author,
+    and write back any ISBN found so future runs use the faster path.
+
+    Rate-limited to be polite to the OL API.
+    """
+    q = db.query(Book)
     if only_unenriched:
         q = q.filter(Book.enriched_at == None)
     if limit:
@@ -177,9 +198,19 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
 
     for b in books:
         isbn = b.isbn13 or b.isbn
-        if not isbn:
-            continue
-        doc = _fetch(isbn)
+        if isbn:
+            doc = _fetch(isbn)
+        else:
+            doc = _fetch_by_title_author(b.title, b.author)
+            if doc:
+                # Write back any ISBN so future enrichment runs use the ISBN path
+                isbns: list[str] = doc.get("isbn") or []
+                isbn13 = next((i for i in isbns if len(i) == 13), None)
+                if isbn13:
+                    b.isbn13 = isbn13
+                elif isbns:
+                    b.isbn = isbns[0]
+
         processed += 1
         if doc:
             if enrich_book(b, doc):
@@ -189,7 +220,6 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
             # Mark as attempted so we don't re-fetch on every run
             b.enriched_at = datetime.utcnow()
 
-        # Commit in batches
         if processed % 20 == 0:
             db.commit()
 

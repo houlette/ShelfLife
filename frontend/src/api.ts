@@ -1,4 +1,4 @@
-import type { Book, Summary, AuthorStat, ShelfData, RatingBucket, IngestStatus, Insight, GenreStat, EnrichStatus, Recommendation, DiscoveryCandidate } from './types'
+import type { Book, Summary, AuthorStat, ShelfData, RatingBucket, IngestStatus, Insight, GenreStat, EnrichStatus, Recommendation, DiscoveryCandidate, BooklistPendingEntry } from './types'
 
 const BASE = '/api'
 
@@ -24,6 +24,17 @@ export const api = {
     const fd = new FormData()
     fd.append('file', file)
     return fetch(`${BASE}/ingest/goodreads`, { method: 'POST', body: fd }).then(r => r.json())
+  },
+  uploadBooklist: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return fetch(`${BASE}/ingest/booklist`, { method: 'POST', body: fd }).then(r => r.json())
+  },
+  booklistPending: () => get<BooklistPendingEntry[]>('/ingest/booklist/pending'),
+  resolvePending: (id: number, action: string, bookId?: number) => {
+    const params = new URLSearchParams({ action })
+    if (bookId != null) params.set('book_id', String(bookId))
+    return fetch(`${BASE}/ingest/booklist/pending/${id}/resolve?${params}`, { method: 'POST' }).then(r => r.json())
   },
 
   insights: (period = 'recent') => get<Insight>(`/insights/summary?period=${period}`),
