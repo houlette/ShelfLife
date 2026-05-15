@@ -18,5 +18,10 @@ frontend/dist/
 # Claude Code local settings
 .claude/settings.local.json
 
+# Generated app bundle (built by scripts/build-app.sh)
+ShelfLife.app/
+.shelflife.pid
+.shelflife.log
+
 # OS
 .DS_Store

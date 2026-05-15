@@ -1,0 +1,38 @@
+#!/bin/bash
+# ShelfLife launcher
+# Starts the backend (if not already running) then opens the app in the browser.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+PROJECT="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
+PYTHON="$PROJECT/.venv/bin/python3"
+PORT=8001
+PIDFILE="$PROJECT/.shelflife.pid"
+LOG="$PROJECT/.shelflife.log"
+
+# If the server is already running, just open the browser
+if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    open "http://127.0.0.1:$PORT"
+    exit 0
+fi
+
+# Build the frontend if dist doesn't exist yet
+DIST="$PROJECT/frontend/dist"
+if [ ! -d "$DIST" ]; then
+    cd "$PROJECT/frontend"
+    npm run build
+fi
+
+# Start the backend
+cd "$PROJECT/backend"
+"$PYTHON" -m uvicorn main:app --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &
+echo $! > "$PIDFILE"
+
+# Wait up to 10 seconds for the server to be ready
+for i in $(seq 40); do
+    if curl -sf "http://127.0.0.1:$PORT/api/health" > /dev/null 2>&1; then
+        break
+    fi
+    sleep 0.25
+done
+
+open "http://127.0.0.1:$PORT"

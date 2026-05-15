@@ -2,9 +2,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from db.database import init_db
 from routers import ingest, insights, metrics
@@ -34,3 +36,10 @@ def startup():
 @app.get("/api/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat() + "Z"}
+
+
+# Serve the built React frontend (production mode).
+# The dev proxy in vite.config.ts handles this during development.
+_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if _DIST.exists():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="static")
