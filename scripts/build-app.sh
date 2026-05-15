@@ -17,8 +17,9 @@ echo "▶ Assembling ShelfLife.app…"
 rm -rf "$APP"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
-cp "$SCRIPTS/app-bundle/Info.plist"       "$CONTENTS/Info.plist"
-cp "$SCRIPTS/app-bundle/MacOS/ShelfLife"  "$CONTENTS/MacOS/ShelfLife"
+cp "$SCRIPTS/app-bundle/Info.plist" "$CONTENTS/Info.plist"
+# Substitute the real project path into the launcher template
+sed "s|__PROJECT__|$PROJECT|g" "$SCRIPTS/app-bundle/MacOS/ShelfLife" > "$CONTENTS/MacOS/ShelfLife"
 chmod +x "$CONTENTS/MacOS/ShelfLife"
 
 echo "▶ Generating icon…"

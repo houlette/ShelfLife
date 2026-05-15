@@ -1,9 +1,6 @@
 #!/bin/bash
-# ShelfLife launcher
-# Starts the backend (if not already running) then opens the app in the browser.
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-PROJECT="$(cd "$SCRIPT_DIR/../../.." && pwd -P)"
+# ShelfLife launcher — PROJECT path is substituted at build time by build-app.sh
+PROJECT="__PROJECT__"
 PYTHON="$PROJECT/.venv/bin/python3"
 PORT=8001
 PIDFILE="$PROJECT/.shelflife.pid"
