@@ -35,9 +35,9 @@ export function Sparkline({ values, height = 28, color = 'var(--ink)', area = tr
   areaPath += `L${width - 1},${height}Z`
 
   return (
-    <svg width={width} height={height} style={{ display: 'block' }}>
+    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
       {area && <path d={areaPath} fill={color} fillOpacity={0.10} />}
-      <path d={path} fill="none" stroke={color} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" />
+      <path d={path} fill="none" stroke={color} strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   )
 }
