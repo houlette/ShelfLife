@@ -4,7 +4,7 @@ import { nfmt, mean, effectiveDate, filterBooksByRange, aggregateBooks, ratingCo
 import type { Range, Granularity } from '../utils'
 import { SectionTitle, Stat, Card, BookCover } from '../components'
 import { RatingStars } from '../components/RatingStars'
-import { Sparkline, HBar } from '../charts'
+import { Sparkline, HBar, BarChart } from '../charts'
 
 interface Props {
   books: Book[]
@@ -101,6 +101,13 @@ export function ViewOverview({ books, range, granularity }: Props) {
           <SectionTitle no="03" sub={`${granularity === 'month' ? 'Monthly' : 'Yearly'} reading pace`}>
             Reading pace
           </SectionTitle>
+          <Card title="Pages per year" eyebrow={granularity === 'month' ? 'Monthly' : 'Yearly'} style={{ marginBottom: 24 }}>
+            <BarChart
+              data={periods.map(p => ({ label: p.period, value: p.pages }))}
+              height={140}
+              color="var(--accent)"
+            />
+          </Card>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
             {periods.slice(-12).map(p => (
               <Card key={p.period} padding={14}>
