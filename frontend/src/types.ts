@@ -22,6 +22,7 @@ export interface Book {
   read_count: number
   cover_url: string | null
   genre: string | null
+  year_acquired: number | null
   ol_avg_rating: number | null
   ol_ratings_count: number | null
 }

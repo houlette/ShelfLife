@@ -34,6 +34,7 @@ class Book(Base):
     owned_copies = Column(Integer, default=0)
 
     booklist_id = Column(Integer)          # Index from personal book-ownership sheet
+    year_acquired = Column(Integer)        # "Year Acquired" from booklist sheet
 
     # Enriched from Open Library
     cover_url = Column(Text)
@@ -125,6 +126,7 @@ class BooklistPending(Base):
     read_flag = Column(String(10))
     category = Column(String(50))
     subcategory = Column(String(50))
+    year_acquired = Column(Integer)
 
     candidate_book_ids = Column(Text)  # JSON list of Book.id to compare against
     status = Column(String(20), default="pending")  # "pending" (others reserved)

@@ -108,6 +108,8 @@ def resolve_pending(
             raise HTTPException(404, f"Book {book_id} not found")
         book.owned_copies = 1
         book.booklist_id = entry.booklist_index
+        if entry.year_acquired is not None:
+            book.year_acquired = entry.year_acquired
         entry.status = "merged"
 
     elif action == "insert":

@@ -18,6 +18,8 @@ _MIGRATIONS = [
     ("books", "ol_work_key VARCHAR(50)"),
     ("books", "enriched_at DATETIME"),
     ("books", "booklist_id INTEGER"),
+    ("books", "year_acquired INTEGER"),
+    ("booklist_pending", "year_acquired INTEGER"),
 ]
 
 _INDEXES = [

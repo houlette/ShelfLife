@@ -87,6 +87,7 @@ def _book_entry_from_pending(pending: BooklistPending) -> dict[str, Any]:
         "bookshelves": bookshelves,
         "owned_copies": 1,
         "read_count": 1 if (pending.read_flag or "").lower() == "yes" else 0,
+        "year_acquired": pending.year_acquired,
     }
 
 
@@ -144,6 +145,8 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
             read_flag = row.get("Read?", "").strip()
             category = row.get("Category", "").strip()
             subcategory = row.get("Subcategory", "").strip()
+            raw_year = row.get("Year Acquired", "").strip()
+            year_acquired = int(raw_year) if raw_year.isdigit() else None
 
             nt = _normalize(title)
             na = _normalize(author_full or "")
@@ -157,9 +160,11 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
                 and candidates[0][1]  # DB book has an author
                 and candidates[0][1] == na
             ):
+                update = {"owned_copies": 1, "booklist_id": idx}
+                if year_acquired is not None:
+                    update["year_acquired"] = year_acquired
                 db.query(Book).filter(Book.id == candidates[0][0]).update(
-                    {"owned_copies": 1, "booklist_id": idx},
-                    synchronize_session=False,
+                    update, synchronize_session=False,
                 )
                 matched += 1
 
@@ -175,6 +180,7 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
                         read_flag=read_flag or None,
                         category=category or None,
                         subcategory=subcategory or None,
+                        year_acquired=year_acquired,
                         candidate_book_ids=json.dumps(candidate_ids),
                         status="pending",
                         created_at=datetime.utcnow(),
@@ -198,6 +204,7 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
                     "bookshelves": bookshelves,
                     "owned_copies": 1,
                     "read_count": 1 if read_flag.lower() == "yes" else 0,
+                    "year_acquired": year_acquired,
                 }
                 stmt = (
                     sqlite_insert(Book)

@@ -16,6 +16,16 @@ export function ViewTimeline({ books, range, granularity }: Props) {
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
   const periods = useMemo(() => aggregateBooks(filtered, granularity), [filtered, granularity])
 
+  const acquiredByYear = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const b of books) {
+      if (b.year_acquired) counts[b.year_acquired] = (counts[b.year_acquired] ?? 0) + 1
+    }
+    return Object.entries(counts)
+      .map(([year, count]) => ({ label: year, value: count }))
+      .sort((a, b) => Number(a.label) - Number(b.label))
+  }, [books])
+
   const barData = useMemo(() =>
     periods.map(p => ({
       label: granularity === 'month' && p.month
@@ -49,6 +59,12 @@ export function ViewTimeline({ books, range, granularity }: Props) {
       <Card title={`Books per ${granularity}`} eyebrow="Reading volume" style={{ marginBottom: 32 }}>
         <BarChart data={barData} height={220} color="var(--accent)" />
       </Card>
+
+      {acquiredByYear.length > 0 && (
+        <Card title="Books acquired by year" eyebrow="Lifetime · from booklist" style={{ marginBottom: 32 }}>
+          <BarChart data={acquiredByYear} height={180} color="var(--accent-2)" />
+        </Card>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
         {/* Cumulative */}
