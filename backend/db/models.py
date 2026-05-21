@@ -45,6 +45,11 @@ class Book(Base):
     ol_work_key = Column(String(50))
     enriched_at = Column(DateTime)
 
+    # Enriched from Wikidata (author demographics)
+    author_gender = Column(String(20))    # "Man" | "Woman" | "Non-binary" | "Other"
+    author_ethnicity = Column(String(100))  # raw Wikidata label (e.g. "African Americans")
+    diversity_enriched_at = Column(DateTime)  # when Wikidata was last queried for this author
+
 
 class ExternalRating(Base):
     """Ratings sourced from public datasets (Goodbooks-10k, etc.) used for

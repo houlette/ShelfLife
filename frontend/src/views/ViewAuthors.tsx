@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Book } from '../types'
 import { nfmt, filterBooksByRange } from '../utils'
 import type { Range } from '../utils'
 import { SectionTitle, Stat, Card } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { HBar } from '../charts'
+import { api } from '../api'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface Props {
   books: Book[]
@@ -106,7 +108,7 @@ export function ViewAuthors({ books, range }: Props) {
 
       {/* Author-level your rating vs OL */}
       {ratingComparable.length > 0 && (
-        <div>
+        <div style={{ marginBottom: 48 }}>
           <SectionTitle no="02" sub="Authors with 3+ rated books where your average diverges 0.5+ from Open Library">
             Where you disagree
           </SectionTitle>
@@ -120,6 +122,227 @@ export function ViewAuthors({ books, range }: Props) {
           </div>
         </div>
       )}
+
+      <DiversitySection books={readBooks} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Diversity section
+// ---------------------------------------------------------------------------
+
+const GENDER_COLORS: Record<string, string> = {
+  'Man':        '#5b8ed6',
+  'Woman':      '#d65b8e',
+  'Non-binary': '#8e5bd6',
+  'Other':      '#7ab8a0',
+  'Unknown':    'var(--line-soft)',
+}
+
+const ETHNICITY_COLORS: Record<string, string> = {
+  'White / European':  '#7ab8d6',
+  'Black / African':   '#d6904e',
+  'Asian':             '#d4c94a',
+  'Hispanic / Latino': '#6ac86a',
+  'Middle Eastern':    '#d65b5b',
+  'Indigenous':        '#a07ad6',
+  'Other':             '#8ab0b8',
+  'Unknown':           'var(--line-soft)',
+}
+
+const ETHNICITY_ORDER = [
+  'White / European', 'Black / African', 'Asian',
+  'Hispanic / Latino', 'Middle Eastern', 'Indigenous', 'Other', 'Unknown',
+]
+
+function groupEthnicity(raw: string | null): string {
+  if (!raw) return 'Unknown'
+  const l = raw.toLowerCase()
+  if (/white|european|british|english|irish|french|german|italian|polish|dutch|scandinavian|swedish|norwegian|danish|finnish|greek|spanish|portuguese|australian/.test(l)) return 'White / European'
+  if (/black|african american|african|nigerian|ghanaian|kenyan|ugandan|jamaican|haitian|caribbean|cameroonian|senegalese|zimbabwean/.test(l)) return 'Black / African'
+  if (/asian|chinese|japanese|korean|indian|south asian|pakistani|bangladeshi|vietnamese|thai|filipino|east asian|southeast asian|bengali|tamil/.test(l)) return 'Asian'
+  if (/hispanic|latino|latina|mexican|cuban|puerto rican|colombian|argentinian|venezuelan|peruvian|chilean|brazilian|ecuadorian/.test(l)) return 'Hispanic / Latino'
+  if (/arab|arabic|middle east|iranian|turkish|lebanese|jewish|israeli|moroccan|egyptian|persian|afghan|kurdish/.test(l)) return 'Middle Eastern'
+  if (/native american|indigenous|first nations|aboriginal|cherokee|navajo|lakota|māori|inuit|ojibwe/.test(l)) return 'Indigenous'
+  return 'Other'
+}
+
+const POLL_MS = 3000
+
+function DiversitySection({ books }: { books: Book[] }) {
+  const qc = useQueryClient()
+  const [enriching, setEnriching] = useState(false)
+  const [progress, setProgress] = useState<{
+    authors_processed: number; authors_enriched: number; books_updated: number; errors: number
+  } | null>(null)
+  const [done, setDone] = useState(false)
+  const [enrichError, setEnrichError] = useState<string | null>(null)
+
+  // Compute per-author demographics from all read books
+  const authorDemographics = useMemo(() => {
+    const map: Record<string, { gender: string | null; ethnicity: string | null }> = {}
+    for (const b of books) {
+      if (!b.author) continue
+      if (!map[b.author]) map[b.author] = { gender: null, ethnicity: null }
+      if (!map[b.author].gender && b.author_gender) map[b.author].gender = b.author_gender
+      if (!map[b.author].ethnicity && b.author_ethnicity) map[b.author].ethnicity = b.author_ethnicity
+    }
+    return map
+  }, [books])
+
+  const totalAuthors = Object.keys(authorDemographics).length
+  const enrichedAuthors = Object.values(authorDemographics).filter(d => d.gender != null).length
+
+  const genderBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const { gender } of Object.values(authorDemographics)) {
+      const key = gender ?? 'Unknown'
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    const order = ['Man', 'Woman', 'Non-binary', 'Other', 'Unknown']
+    return order
+      .filter(g => (counts[g] ?? 0) > 0)
+      .map(g => ({ label: g, value: counts[g] ?? 0, color: GENDER_COLORS[g] }))
+  }, [authorDemographics])
+
+  const ethnicityBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const { ethnicity } of Object.values(authorDemographics)) {
+      const key = groupEthnicity(ethnicity)
+      counts[key] = (counts[key] ?? 0) + 1
+    }
+    return ETHNICITY_ORDER
+      .filter(e => (counts[e] ?? 0) > 0)
+      .map(e => ({ label: e, value: counts[e] ?? 0, color: ETHNICITY_COLORS[e] }))
+  }, [authorDemographics])
+
+  async function handleEnrich() {
+    setEnriching(true)
+    setDone(false)
+    setProgress(null)
+    setEnrichError(null)
+
+    try {
+      // Fire-and-forget POST — returns immediately, enrichment runs in background
+      await api.diversityEnrich()
+
+      // Poll the status endpoint until the background task finishes
+      while (true) {
+        await new Promise(r => setTimeout(r, POLL_MS))
+        const status = await api.diversityStatus()
+        setProgress(status.task)
+        qc.invalidateQueries({ queryKey: ['books'] })
+        if (!status.task.running) break
+      }
+    } catch (e) {
+      setEnrichError(String(e))
+    } finally {
+      setEnriching(false)
+      setDone(true)
+    }
+  }
+
+  function handleStop() {
+    api.diversityStop().catch(() => {/* ignore */})
+  }
+
+  const sectionNo = '03'
+
+  return (
+    <div>
+      <SectionTitle
+        no={sectionNo}
+        sub={`${nfmt(enrichedAuthors)} of ${nfmt(totalAuthors)} unique authors enriched via Wikidata`}
+      >
+        Diversity
+      </SectionTitle>
+
+      {/* Enrich controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: progress ? 16 : 32 }}>
+        {!enriching ? (
+          <button
+            onClick={handleEnrich}
+            style={{
+              padding: '8px 16px', fontSize: 12, cursor: 'pointer',
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              borderRadius: 2, color: 'var(--ink)', fontFamily: 'inherit',
+            }}
+          >
+            Enrich from Wikidata
+          </button>
+        ) : (
+          <button
+            onClick={handleStop}
+            style={{
+              padding: '8px 16px', fontSize: 12, cursor: 'pointer',
+              background: 'var(--paper)', border: '1px solid var(--line)',
+              borderRadius: 2, color: 'var(--m2)', fontFamily: 'inherit',
+            }}
+          >
+            Stop
+          </button>
+        )}
+        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+          {enriching
+            ? `Searching Wikidata… ${nfmt(totalAuthors - enrichedAuthors)} authors remaining`
+            : `${nfmt(totalAuthors - enrichedAuthors)} authors not yet searched`}
+        </div>
+      </div>
+
+      {enrichError && (
+        <div style={{ marginBottom: 24, padding: '10px 14px', fontSize: 13, color: 'var(--m1)',
+          background: 'color-mix(in srgb, var(--m1) 10%, transparent)',
+          border: '1px solid var(--m1)', borderRadius: 4 }}>
+          {enrichError}
+        </div>
+      )}
+
+      {progress && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+          {[
+            { label: 'Authors searched', value: progress.authors_processed },
+            { label: 'Authors enriched', value: progress.authors_enriched },
+            { label: 'Books updated', value: progress.books_updated },
+            { label: 'Errors', value: progress.errors },
+          ].map(s => (
+            <div key={s.label} style={{ padding: '14px 16px', border: '1px solid var(--line)', borderRadius: 2 }}>
+              <div className="num serif" style={{ fontSize: 24, color: 'var(--ink)', lineHeight: 1 }}>{s.value}</div>
+              <div className="eyebrow" style={{ marginTop: 4 }}>
+                {s.label}{!done && s.label === 'Authors searched' ? '…' : ''}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Charts */}
+      {enrichedAuthors === 0 ? (
+        <div style={{ padding: '32px 0', fontSize: 13, color: 'var(--muted)' }}>
+          No demographic data yet. Click "Enrich from Wikidata" to start.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <Card title="Gender" eyebrow={`${nfmt(enrichedAuthors)} authors · all-time reads`} style={{ minWidth: 0 }}>
+            <HBar
+              items={genderBreakdown}
+              format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
+            />
+          </Card>
+          <Card title="Ethnicity / Race" eyebrow="Broad categories from Wikidata labels" style={{ minWidth: 0 }}>
+            <HBar
+              items={ethnicityBreakdown}
+              format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
+            />
+          </Card>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16, fontSize: 11, color: 'var(--muted-2)', lineHeight: 1.6 }}>
+        Demographics sourced from Wikidata (P21 sex/gender, P172 ethnic group). Ethnicity labels are
+        grouped into broad categories; accuracy depends on Wikidata coverage. "Unknown" includes
+        authors not yet searched or not found on Wikidata.
+      </div>
     </div>
   )
 }

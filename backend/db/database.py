@@ -20,6 +20,9 @@ _MIGRATIONS = [
     ("books", "booklist_id INTEGER"),
     ("books", "year_acquired INTEGER"),
     ("booklist_pending", "year_acquired INTEGER"),
+    ("books", "author_gender VARCHAR(20)"),
+    ("books", "author_ethnicity VARCHAR(100)"),
+    ("books", "diversity_enriched_at DATETIME"),
 ]
 
 _INDEXES = [

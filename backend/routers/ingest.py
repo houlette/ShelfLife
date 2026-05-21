@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -10,6 +11,44 @@ import ingest.booklist as booklist_ingest
 import ingest.openlibrary as ol
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
+
+# ---------------------------------------------------------------------------
+# Diversity enrichment background task state
+# ---------------------------------------------------------------------------
+
+_diversity_lock  = threading.Lock()
+_diversity_state: dict = {
+    "running":           False,
+    "authors_processed": 0,
+    "authors_enriched":  0,
+    "books_updated":     0,
+    "errors":            0,
+    "stop_flag":         [False],   # single-element list so the thread can see mutations
+}
+
+
+def _run_diversity_bg(limit: int | None) -> None:
+    """Background thread: runs enrich_all and keeps _diversity_state current."""
+    import ingest.wikidata as wikidata
+    from db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        stop_flag = _diversity_state["stop_flag"]
+
+        def _on_progress(totals: dict) -> None:
+            with _diversity_lock:
+                _diversity_state.update(totals)
+
+        wikidata.enrich_all(db, limit=limit, on_progress=_on_progress,
+                            stop_flag=stop_flag)
+    except Exception:
+        with _diversity_lock:
+            _diversity_state["errors"] += 1
+    finally:
+        db.close()
+        with _diversity_lock:
+            _diversity_state["running"] = False
 
 
 def _log(db: Session, source: str, filename: str, result: dict, status: str = "ok"):
@@ -155,6 +194,74 @@ def enrich_library(limit: int | None = None, db: Session = Depends(get_db)):
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@router.post("/diversity-enrich")
+def diversity_enrich(limit: int | None = None, db: Session = Depends(get_db)):
+    """Start background diversity enrichment.  Returns immediately.
+
+    If enrichment is already running, returns the current state without
+    starting a second thread.  Pass limit=N to cap the number of authors
+    processed in this run (default: all remaining).
+    """
+    with _diversity_lock:
+        if _diversity_state["running"]:
+            return {"status": "already_running", **{
+                k: v for k, v in _diversity_state.items() if k != "stop_flag"
+            }}
+        _diversity_state.update({
+            "running":           True,
+            "authors_processed": 0,
+            "authors_enriched":  0,
+            "books_updated":     0,
+            "errors":            0,
+            "stop_flag":         [False],
+        })
+
+    thread = threading.Thread(target=_run_diversity_bg, args=(limit,), daemon=True)
+    thread.start()
+    return {"status": "started"}
+
+
+@router.post("/diversity-enrich/stop")
+def diversity_enrich_stop():
+    """Ask the running enrichment thread to stop after the current author."""
+    with _diversity_lock:
+        _diversity_state["stop_flag"][0] = True
+    return {"ok": True}
+
+
+@router.get("/diversity-enrich/status")
+def diversity_enrich_status(db: Session = Depends(get_db)):
+    """Coverage stats + current background task state."""
+    from sqlalchemy import distinct
+
+    read_q = db.query(Book).filter(Book.exclusive_shelf == "read", Book.author.isnot(None))
+    total_read    = read_q.count()
+    searched      = read_q.filter(Book.diversity_enriched_at.isnot(None)).count()
+    with_gender   = read_q.filter(Book.author_gender.isnot(None)).count()
+    with_ethnicity = read_q.filter(Book.author_ethnicity.isnot(None)).count()
+    total_authors = db.query(func.count(distinct(Book.author))).filter(
+        Book.exclusive_shelf == "read", Book.author.isnot(None)
+    ).scalar() or 0
+    searched_authors = db.query(func.count(distinct(Book.author))).filter(
+        Book.exclusive_shelf == "read",
+        Book.author.isnot(None),
+        Book.diversity_enriched_at.isnot(None),
+    ).scalar() or 0
+
+    with _diversity_lock:
+        task = {k: v for k, v in _diversity_state.items() if k != "stop_flag"}
+
+    return {
+        "total_read":        total_read,
+        "total_authors":     total_authors,
+        "searched":          searched,
+        "searched_authors":  searched_authors,
+        "with_gender":       with_gender,
+        "with_ethnicity":    with_ethnicity,
+        "task":              task,
+    }
 
 
 @router.post("/reclassify")

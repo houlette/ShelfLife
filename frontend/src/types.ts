@@ -25,6 +25,8 @@ export interface Book {
   year_acquired: number | null
   ol_avg_rating: number | null
   ol_ratings_count: number | null
+  author_gender: string | null
+  author_ethnicity: string | null
 }
 
 export interface GenreStat {

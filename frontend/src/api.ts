@@ -45,6 +45,18 @@ export const api = {
   enrichLibrary: () =>
     fetch(`${BASE}/ingest/enrich`, { method: 'POST' }).then(r => r.json()),
 
+  diversityStatus: () => get<{
+    total_read: number; total_authors: number;
+    searched: number; searched_authors: number;
+    with_gender: number; with_ethnicity: number;
+    task: { running: boolean; authors_processed: number; authors_enriched: number; books_updated: number; errors: number }
+  }>('/ingest/diversity-enrich/status'),
+  diversityEnrich: (limit?: number) => {
+    const qs = limit != null ? `?limit=${limit}` : ''
+    return fetch(`${BASE}/ingest/diversity-enrich${qs}`, { method: 'POST' }).then(r => r.json())
+  },
+  diversityStop: () => fetch(`${BASE}/ingest/diversity-enrich/stop`, { method: 'POST' }).then(r => r.json()),
+
   cfStatus: () => get<{ ratings_loaded: number; books_covered: number; similarity_pairs: number }>('/ingest/cf-status'),
   cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST' }).then(r => r.json()),
 
