@@ -194,6 +194,7 @@ def _book_dict(b: Book) -> dict:
         "genre": b.genre,
         "ol_avg_rating": b.ol_avg_rating,
         "ol_ratings_count": b.ol_ratings_count,
+        "year_acquired": b.year_acquired,
     }
 
 
