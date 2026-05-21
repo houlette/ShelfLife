@@ -131,7 +131,7 @@ export function ViewBooks({ books }: Props) {
         {colHead('Author', 'author')}
         <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Genre</span>
         {colHead('Rating', 'rating')}
-        {colHead('Year', 'year', { textAlign: 'right' })}
+        {colHead('Published', 'year', { textAlign: 'right' })}
         {colHead('Pages', 'pages', { textAlign: 'right' })}
         {colHead('Read', 'date', { textAlign: 'right' })}
       </div>
