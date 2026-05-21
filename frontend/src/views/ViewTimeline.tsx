@@ -16,6 +16,17 @@ export function ViewTimeline({ books, range, granularity }: Props) {
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
   const periods = useMemo(() => aggregateBooks(filtered, granularity), [filtered, granularity])
 
+  const byPubYear = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const b of readBooks) {
+      const y = b.original_pub_year ?? b.year_published
+      if (y) counts[y] = (counts[y] ?? 0) + 1
+    }
+    return Object.entries(counts)
+      .map(([year, count]) => ({ label: year, value: count }))
+      .sort((a, b) => Number(a.label) - Number(b.label))
+  }, [readBooks])
+
   const acquiredByYear = useMemo(() => {
     const counts: Record<number, number> = {}
     for (const b of books) {
@@ -63,6 +74,12 @@ export function ViewTimeline({ books, range, granularity }: Props) {
       {acquiredByYear.length > 0 && (
         <Card title="Books acquired by year" eyebrow="Lifetime · from booklist" style={{ marginBottom: 32 }}>
           <BarChart data={acquiredByYear} height={180} color="var(--accent-2)" />
+        </Card>
+      )}
+
+      {byPubYear.length > 0 && (
+        <Card title="Books read by publication year" eyebrow="All time" style={{ marginBottom: 32 }}>
+          <BarChart data={byPubYear} height={180} color="var(--accent-3)" />
         </Card>
       )}
 
