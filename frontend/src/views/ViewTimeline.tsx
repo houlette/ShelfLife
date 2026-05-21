@@ -79,7 +79,8 @@ export function ViewTimeline({ books, range, granularity }: Props) {
 
       {byPubYear.length > 0 && (
         <Card title="Books read by publication year" eyebrow="All time" style={{ marginBottom: 32 }}>
-          <BarChart data={byPubYear} height={180} color="var(--accent-3)" />
+          <BarChart data={byPubYear} height={180} color="var(--accent-3)"
+            labelFilter={l => Number(l) % 10 === 0} />
         </Card>
       )}
 

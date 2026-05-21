@@ -11,9 +11,10 @@ interface Props {
   height?: number
   color?: string
   showAxis?: boolean
+  labelFilter?: (label: string, index: number) => boolean
 }
 
-export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis = true }: Props) {
+export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis = true, labelFilter }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(600)
 
@@ -44,7 +45,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
   }
 
   return (
-    <div ref={ref} style={{ width: '100%', height }}>
+    <div ref={ref} style={{ width: '100%', height, overflow: 'hidden' }}>
       <svg width={w} height={height}>
         {yTicks.map((t, i) => (
           <g key={i}>
@@ -65,7 +66,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
                 width={barW} height={h}
                 fill={d.color ?? color} opacity={0.85}
               />
-              {showAxis && barW > 18 && (
+              {showAxis && (labelFilter ? labelFilter(d.label, i) : barW > 18) && (
                 <text
                   x={x + barW / 2} y={height - 8}
                   textAnchor="middle"
