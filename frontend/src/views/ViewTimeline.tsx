@@ -86,12 +86,12 @@ export function ViewTimeline({ books, range, granularity }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
         {/* Cumulative */}
-        <Card title="Cumulative books read" eyebrow="Running total">
+        <Card title="Cumulative books read" eyebrow="Running total" style={{ minWidth: 0 }}>
           <LineChart data={cumulativeData} y="cumulative" height={200} color="var(--accent)" area smoothWindow={1} />
         </Card>
 
         {/* Pages per period */}
-        <Card title={`Pages per ${granularity}`} eyebrow="Volume">
+        <Card title={`Pages per ${granularity}`} eyebrow="Volume" style={{ minWidth: 0 }}>
           <LineChart data={pagesData} y="pages" height={200} color="var(--accent-2)" smoothWindow={3} />
         </Card>
       </div>

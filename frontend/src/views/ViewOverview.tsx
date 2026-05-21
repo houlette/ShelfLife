@@ -49,12 +49,12 @@ export function ViewOverview({ books, range, granularity }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
         {/* Rating distribution */}
-        <Card title="Rating distribution" eyebrow="Your ratings">
+        <Card title="Rating distribution" eyebrow="Your ratings" style={{ minWidth: 0 }}>
           <HBar items={ratingDist} />
         </Card>
 
         {/* Books per year sparkline */}
-        <Card title="Books per year" eyebrow="Lifetime">
+        <Card title="Books per year" eyebrow="Lifetime" style={{ minWidth: 0 }}>
           <div style={{ marginBottom: 12 }}>
             <Sparkline values={booksPerYear.map(p => p.books)} height={48} width={320} color="var(--accent)" />
           </div>
