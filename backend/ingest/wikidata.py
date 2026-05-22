@@ -7,14 +7,23 @@ Primary:  Wikidata P21 — authoritative (supports non-binary, handles ambiguous
 Fallback: gender_guesser — offline first-name database, covers the ~40% of
           authors Wikidata doesn't have entries for.
 
-Ethnicity / origin
-------------------
+Geographic / Cultural Origin
+-----------------------------
 Primary:  Wikipedia article categories — far more populated than Wikidata
           P172.  Categories like "African-American writers", "Black British
           writers", "American poets of Asian descent" are mapped to broad
-          groups.
+          groups.  Jewish writers get their own "Jewish" bucket rather than
+          being folded into "Middle Eastern."
           Two API calls per author: OpenSearch (find page title) +
           query&prop=categories (fetch category list).
+
+Fallback: Wikidata P27 (country of citizenship) — covers authors from
+          non-Western countries who may not be explicitly categorised on
+          Wikipedia (e.g. a Nigerian novelist whose page only says
+          "Nigerian writers").  US/UK/Canada/Australia/Western Europe are
+          intentionally excluded: nationality alone doesn't distinguish
+          origin for white Western authors, and Wikipedia categories already
+          handle diaspora writers from those countries.
 
 Both sources set `diversity_enriched_at` on every processed book so
 re-runs skip already-searched authors regardless of whether data was found.
@@ -106,16 +115,142 @@ def _wd_qid(name: str) -> str | None:
     return results[0]["id"] if results else None
 
 
-def _wd_gender(qid: str) -> str | None:
-    """Fetch P21 (sex/gender) for a Wikidata entity."""
+def _wd_claims(qid: str) -> dict:
+    """Fetch all claims for a Wikidata entity (shared helper)."""
+    data = _get(_WD, {"action": "wbgetentities", "ids": qid, "props": "claims"})
+    return data.get("entities", {}).get(qid, {}).get("claims", {})
+
+
+def _wd_gender(claims: dict) -> str | None:
+    """Extract P21 (sex/gender) from pre-fetched claims."""
     try:
-        data   = _get(_WD, {"action": "wbgetentities", "ids": qid, "props": "claims"})
-        claims = data.get("entities", {}).get(qid, {}).get("claims", {})
         for claim in claims.get("P21", []):
             v = claim.get("mainsnak", {}).get("datavalue", {}).get("value", {})
             qv = v.get("id") if isinstance(v, dict) else None
             if qv in _WD_GENDER:
                 return _WD_GENDER[qv]
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Geographic / Cultural Origin — Wikidata P27 country → origin group
+# ---------------------------------------------------------------------------
+
+# Country QIDs that map to a non-white-Western origin group.
+# US (Q30), UK (Q145), Canada (Q16), Australia (Q408), NZ (Q664) and
+# Western European nations are intentionally absent: nationality there
+# does not distinguish origin for white authors, and Wikipedia article
+# categories already handle diaspora writers from those countries.
+_COUNTRY_ORIGIN: dict[str, str] = {
+    # ── Black / African ──────────────────────────────────────────────────
+    "Q1033": "Black / African",   # Nigeria
+    "Q117":  "Black / African",   # Ghana
+    "Q114":  "Black / African",   # Kenya
+    "Q258":  "Black / African",   # South Africa
+    "Q954":  "Black / African",   # Zimbabwe
+    "Q924":  "Black / African",   # Tanzania
+    "Q1036": "Black / African",   # Uganda
+    "Q115":  "Black / African",   # Ethiopia
+    "Q766":  "Black / African",   # Jamaica
+    "Q790":  "Black / African",   # Haiti
+    "Q754":  "Black / African",   # Trinidad and Tobago
+    "Q244":  "Black / African",   # Barbados
+    "Q1009": "Black / African",   # Cameroon
+    "Q1041": "Black / African",   # Senegal
+    "Q1008": "Black / African",   # Ivory Coast
+    "Q912":  "Black / African",   # Mali
+    "Q1037": "Black / African",   # Rwanda
+    "Q953":  "Black / African",   # Zambia
+    "Q1020": "Black / African",   # Malawi
+    "Q1029": "Black / African",   # Mozambique
+    "Q963":  "Black / African",   # Botswana
+    "Q1030": "Black / African",   # Namibia
+    "Q1045": "Black / African",   # Somalia
+    "Q1049": "Black / African",   # Sudan
+    "Q974":  "Black / African",   # DR Congo
+    "Q971":  "Black / African",   # Republic of Congo
+    "Q916":  "Black / African",   # Angola
+    "Q965":  "Black / African",   # Burkina Faso
+    "Q1006": "Black / African",   # Guinea
+    # ── Asian ────────────────────────────────────────────────────────────
+    "Q148":  "Asian",             # China
+    "Q17":   "Asian",             # Japan
+    "Q884":  "Asian",             # South Korea
+    "Q668":  "Asian",             # India
+    "Q843":  "Asian",             # Pakistan
+    "Q902":  "Asian",             # Bangladesh
+    "Q881":  "Asian",             # Vietnam
+    "Q928":  "Asian",             # Philippines
+    "Q869":  "Asian",             # Thailand
+    "Q854":  "Asian",             # Sri Lanka
+    "Q865":  "Asian",             # Taiwan
+    "Q334":  "Asian",             # Singapore
+    "Q252":  "Asian",             # Indonesia
+    "Q833":  "Asian",             # Malaysia
+    "Q836":  "Asian",             # Myanmar
+    "Q424":  "Asian",             # Cambodia
+    "Q819":  "Asian",             # Laos
+    "Q837":  "Asian",             # Nepal
+    "Q711":  "Asian",             # Mongolia
+    # ── Hispanic / Latino ────────────────────────────────────────────────
+    "Q96":   "Hispanic / Latino", # Mexico
+    "Q155":  "Hispanic / Latino", # Brazil
+    "Q739":  "Hispanic / Latino", # Colombia
+    "Q414":  "Hispanic / Latino", # Argentina
+    "Q419":  "Hispanic / Latino", # Peru
+    "Q298":  "Hispanic / Latino", # Chile
+    "Q717":  "Hispanic / Latino", # Venezuela
+    "Q736":  "Hispanic / Latino", # Ecuador
+    "Q241":  "Hispanic / Latino", # Cuba
+    "Q786":  "Hispanic / Latino", # Dominican Republic
+    "Q750":  "Hispanic / Latino", # Bolivia
+    "Q77":   "Hispanic / Latino", # Uruguay
+    "Q733":  "Hispanic / Latino", # Paraguay
+    "Q774":  "Hispanic / Latino", # Guatemala
+    "Q783":  "Hispanic / Latino", # Honduras
+    "Q792":  "Hispanic / Latino", # El Salvador
+    "Q811":  "Hispanic / Latino", # Nicaragua
+    "Q800":  "Hispanic / Latino", # Costa Rica
+    "Q804":  "Hispanic / Latino", # Panama
+    # ── Middle Eastern ───────────────────────────────────────────────────
+    "Q794":  "Middle Eastern",    # Iran
+    "Q796":  "Middle Eastern",    # Iraq
+    "Q851":  "Middle Eastern",    # Saudi Arabia
+    "Q822":  "Middle Eastern",    # Lebanon
+    "Q79":   "Middle Eastern",    # Egypt
+    "Q858":  "Middle Eastern",    # Syria
+    "Q810":  "Middle Eastern",    # Jordan
+    "Q801":  "Middle Eastern",    # Israel
+    "Q43":   "Middle Eastern",    # Turkey
+    "Q889":  "Middle Eastern",    # Afghanistan
+    "Q1028": "Middle Eastern",    # Morocco
+    "Q262":  "Middle Eastern",    # Algeria
+    "Q948":  "Middle Eastern",    # Tunisia
+    "Q1016": "Middle Eastern",    # Libya
+    "Q805":  "Middle Eastern",    # Yemen
+    "Q23792":"Middle Eastern",    # Palestine
+    "Q399":  "Middle Eastern",    # Armenia
+    "Q227":  "Middle Eastern",    # Azerbaijan
+    "Q817":  "Middle Eastern",    # Kuwait
+    "Q878":  "Middle Eastern",    # UAE
+    "Q846":  "Middle Eastern",    # Qatar
+    "Q398":  "Middle Eastern",    # Bahrain
+    "Q842":  "Middle Eastern",    # Oman
+}
+
+
+def _wd_nationality(claims: dict) -> str | None:
+    """Extract P27 (country of citizenship) from pre-fetched claims and map to
+    a cultural/geographic origin group.  Returns None for countries not in
+    _COUNTRY_ORIGIN (i.e. US, UK, Western Europe)."""
+    try:
+        for claim in claims.get("P27", []):
+            v = claim.get("mainsnak", {}).get("datavalue", {}).get("value", {})
+            country_qid = v.get("id") if isinstance(v, dict) else None
+            if country_qid and country_qid in _COUNTRY_ORIGIN:
+                return _COUNTRY_ORIGIN[country_qid]
     except Exception:
         pass
     return None
@@ -155,7 +290,11 @@ def resolve_gender(author: str) -> str | None:
     qid = _wd_qid(author)
     if qid:
         time.sleep(0.5)   # Wikidata asks for ≤1 req/s; two calls = 2s per author
-        gender = _wd_gender(qid)
+        try:
+            claims = _wd_claims(qid)
+            gender = _wd_gender(claims)
+        except Exception:
+            gender = None
         if gender:
             return gender
     return _gender_from_name(author)
@@ -193,8 +332,22 @@ def _wp_categories(author: str) -> list[str]:
 
 
 def _ethnicity_from_categories(cats: list[str]) -> str | None:
-    """Map Wikipedia article categories to a broad ethnicity/origin group."""
+    """Map Wikipedia article categories to a broad cultural/geographic origin group."""
     text = " ".join(cats).lower()
+
+    # ---- Jewish (checked before Middle Eastern to avoid misclassification) --
+    # Jewish American/British authors dominate Wikipedia's "Jewish" categories;
+    # keeping them separate from Middle Eastern is more accurate.
+    if any(x in text for x in [
+        "jewish american", "jewish-american",
+        "jewish british", "jewish-british",
+        "jewish canadian", "jewish australian",
+        "of jewish descent",
+        "american jewish writer", "american jewish novelist",
+        "british jewish writer", "british jewish novelist",
+        "jewish writer", "jewish novelist", "jewish poet",
+    ]):
+        return "Jewish"
 
     # ---- Black / African -----------------------------------------------
     if any(x in text for x in [
@@ -259,13 +412,11 @@ def _ethnicity_from_categories(cats: list[str]) -> str | None:
         return "Hispanic / Latino"
 
     # ---- Middle Eastern ------------------------------------------------
+    # Note: Jewish writers are handled above; "of jewish descent" is NOT here.
     if any(x in text for x in [
         "arab american", "iranian american", "turkish american",
         "lebanese american", "egyptian american",
         "of arab descent", "of iranian descent",
-        "of jewish descent",
-        "jewish american", "jewish british", "jewish canadian",
-        "jewish australian",
         "arabic writer", "iranian writer", "turkish writer",
         "lebanese writer", "egyptian writer", "afghan writer",
         "armenian writer", "kurdish writer",
@@ -286,7 +437,11 @@ def _ethnicity_from_categories(cats: list[str]) -> str | None:
 
 
 def resolve_ethnicity(author: str) -> str | None:
-    """Return broad ethnicity/origin group for an author via Wikipedia categories."""
+    """Return broad cultural/geographic origin group for an author.
+
+    Primary:  Wikipedia article categories.
+    (No P27 fallback here — use enrich_author() for the full pipeline.)
+    """
     cats = _wp_categories(author)
     return _ethnicity_from_categories(cats) if cats else None
 
@@ -296,10 +451,38 @@ def resolve_ethnicity(author: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def enrich_author(author_name: str) -> dict:
-    """Return {"gender": str | None, "ethnicity": str | None} for one author."""
-    gender    = resolve_gender(author_name)
+    """Return {"gender": str | None, "ethnicity": str | None} for one author.
+
+    Fetches the Wikidata QID once and reuses it across three lookups:
+      1. P21 (sex/gender) — primary gender source
+      2. Wikipedia categories — primary origin source
+      3. P27 (country of citizenship) — fallback origin for non-Western authors
+    """
+    # ── Step 1: single QID lookup ──────────────────────────────────────
+    qid = _wd_qid(author_name)
+    claims: dict = {}
+    if qid:
+        time.sleep(0.5)   # respect ≤200 req/min Wikimedia limit
+        try:
+            claims = _wd_claims(qid)
+        except Exception:
+            claims = {}
+
+    # ── Step 2: gender ─────────────────────────────────────────────────
+    gender = _wd_gender(claims) if claims else None
+    if not gender:
+        gender = _gender_from_name(author_name)
+
+    # ── Step 3: origin — Wikipedia categories first ────────────────────
     time.sleep(0.5)
-    ethnicity = resolve_ethnicity(author_name)
+    cats = _wp_categories(author_name)
+    ethnicity = _ethnicity_from_categories(cats) if cats else None
+
+    # ── Step 4: P27 nationality fallback (non-Western countries only) ──
+    if not ethnicity and claims:
+        time.sleep(0.3)
+        ethnicity = _wd_nationality(claims)
+
     return {"gender": gender, "ethnicity": ethnicity}
 
 
@@ -351,6 +534,9 @@ def enrich_all(
         try:
             result = enrich_author(author)
             for book in books:
+                # Never overwrite a value the user set manually
+                if book.author_diversity_manual:
+                    continue
                 book.diversity_enriched_at = now
                 if result["gender"]:
                     book.author_gender = result["gender"]

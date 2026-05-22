@@ -12,9 +12,9 @@ const SIZES = { sm: 24, md: 36, lg: 52, xl: 80 }
 export function Stat({ label, value, unit, sub, align = 'left', size = 'lg' }: Props) {
   const fs = SIZES[size]
   return (
-    <div style={{ textAlign: align }}>
+    <div style={{ textAlign: align, minWidth: 0 }}>
       <div className="eyebrow" style={{ marginBottom: 8 }}>{label}</div>
-      <div className="serif num" style={{ fontSize: fs, lineHeight: 0.95, color: 'var(--ink)', letterSpacing: '-0.03em' }}>
+      <div className="serif num" style={{ fontSize: fs, lineHeight: 0.95, color: 'var(--ink)', letterSpacing: '-0.03em', wordBreak: 'break-word' }}>
         {value ?? '—'}
         {unit && (
           <span style={{ fontSize: fs * 0.32, marginLeft: 4, color: 'var(--muted)', fontFamily: 'DM Sans', letterSpacing: 'normal' }}>

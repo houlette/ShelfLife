@@ -27,6 +27,7 @@ export interface Book {
   ol_ratings_count: number | null
   author_gender: string | null
   author_ethnicity: string | null
+  author_diversity_manual?: boolean
 }
 
 export interface GenreStat {

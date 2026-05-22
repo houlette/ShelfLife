@@ -58,6 +58,15 @@ export const api = {
     return fetch(`${BASE}/ingest/diversity-enrich${qs}`, { method: 'POST' }).then(r => r.json())
   },
   diversityStop: () => fetch(`${BASE}/ingest/diversity-enrich/stop`, { method: 'POST' }).then(r => r.json()),
+  diversityReset: (scope: string) =>
+    fetch(`${BASE}/ingest/diversity-enrich/reset?scope=${scope}`, { method: 'POST' })
+      .then(r => { if (!r.ok) throw new Error(`Reset failed: ${r.status} ${r.statusText}`); return r.json() }),
+  updateAuthorDiversity: (author: string, gender: string | null, ethnicity: string | null) =>
+    fetch(`${BASE}/ingest/author-diversity`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ author, gender, ethnicity }),
+    }).then(r => { if (!r.ok) throw new Error(`Update failed: ${r.status}`); return r.json() }),
 
   cfStatus: () => get<{ ratings_loaded: number; books_covered: number; similarity_pairs: number }>('/ingest/cf-status'),
   cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST' }).then(r => r.json()),

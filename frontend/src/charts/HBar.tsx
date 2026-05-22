@@ -3,6 +3,7 @@ interface BarItem {
   value: number
   color?: string
   suffix?: string
+  onLabelClick?: () => void
 }
 
 interface Props {
@@ -27,7 +28,20 @@ export function HBar({ items, max, color = 'var(--ink)', height = 18, format = (
             alignItems: 'center', gap: 12, padding: '6px 0',
             borderTop: i === 0 ? 'none' : '1px solid var(--line-soft)',
           }}>
-            <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>{it.label}</div>
+            <div style={{
+              fontSize: 12.5, color: 'var(--ink)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {it.onLabelClick
+                ? <button onClick={it.onLabelClick} style={{
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 'inherit', color: 'inherit',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    maxWidth: '100%', display: 'block',
+                  }}>{it.label}</button>
+                : it.label
+              }
+            </div>
             <div style={{ position: 'relative', height }}>
               <div style={{
                 position: 'absolute',

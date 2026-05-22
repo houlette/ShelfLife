@@ -46,6 +46,15 @@ export function Scatter({
   const X = (v: number) => padL + ((v - xMin) / (xMax - xMin)) * innerW
   const Y = (v: number) => padT + (1 - (v - yMin) / (yMax - yMin)) * innerH
 
+  // Nice tick algorithm — same as BarChart/LineChart
+  function niceStep(range: number, targetTicks = 5): number {
+    const rough = range / targetTicks
+    const mag = Math.pow(10, Math.floor(Math.log10(rough)))
+    const norm = rough / mag
+    const nice = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10
+    return nice * mag
+  }
+
   let regLine: { m: number; b: number } | null = null
   if (regression && valid.length > 5) {
     const n = valid.length
@@ -56,14 +65,21 @@ export function Scatter({
     regLine = { m, b }
   }
 
-  const xTicks: number[] = [], yTicks: number[] = []
-  for (let i = 0; i <= 4; i++) {
-    xTicks.push(xMin + (xMax - xMin) * (i / 4))
-    yTicks.push(yMin + (yMax - yMin) * (i / 4))
-  }
+  const xTicks: number[] = []
+  const yTicks: number[] = []
+  if (xMax > xMin) {
+    const xStep = niceStep(xMax - xMin, 4)
+    const xStart = Math.ceil(xMin / xStep) * xStep
+    for (let v = xStart; v <= xMax + xStep * 0.01; v += xStep) xTicks.push(v)
+  } else { xTicks.push(xMin) }
+  if (yMax > yMin) {
+    const yStep = niceStep(yMax - yMin, 4)
+    const yStart = Math.ceil(yMin / yStep) * yStep
+    for (let v = yStart; v <= yMax + yStep * 0.01; v += yStep) yTicks.push(v)
+  } else { yTicks.push(yMin) }
 
   return (
-    <div ref={ref} style={{ width: '100%', height }}>
+    <div ref={ref} style={{ width: '100%', height, overflow: 'hidden' }}>
       <svg width={w} height={height}>
         {yTicks.map((t, i) => (
           <g key={'y' + i}>

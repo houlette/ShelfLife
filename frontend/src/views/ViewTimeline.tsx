@@ -20,9 +20,16 @@ export function ViewTimeline({ books, range, granularity }: Props) {
     const counts: Record<number, number> = {}
     for (const b of readBooks) {
       const y = b.original_pub_year ?? b.year_published
-      if (y) counts[y] = (counts[y] ?? 0) + 1
+      if (y && y > 0) counts[y] = (counts[y] ?? 0) + 1
     }
+    const allYears = Object.keys(counts).map(Number).sort((a, b) => a - b)
+    // Drop outlier years: any year more than 300 years before the median
+    // (handles e.g. a single ancient text creating a huge blank gap)
+    const cutoff = allYears.length
+      ? allYears[Math.floor(allYears.length / 2)] - 300
+      : 0
     return Object.entries(counts)
+      .filter(([year]) => Number(year) >= cutoff)
       .map(([year, count]) => ({ label: year, value: count }))
       .sort((a, b) => Number(a.label) - Number(b.label))
   }, [readBooks])
@@ -55,6 +62,9 @@ export function ViewTimeline({ books, range, granularity }: Props) {
     })
   }, [periods])
 
+  const datedCount = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0
+  const undatedCount = filtered.length - datedCount
+
   const pagesData = useMemo(() =>
     periods.map(p => ({ date: p.period, pages: p.pages })),
     [periods],
@@ -86,7 +96,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
         {/* Cumulative */}
-        <Card title="Cumulative books read" eyebrow="Running total" style={{ minWidth: 0 }}>
+        <Card title="Cumulative books read" eyebrow={undatedCount > 0 ? `${nfmt(datedCount)} of ${nfmt(filtered.length)} have a read date` : 'Running total'} style={{ minWidth: 0 }}>
           <LineChart data={cumulativeData} y="cumulative" height={200} color="var(--accent)" area smoothWindow={1} />
         </Card>
 

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import type { DiscoveryCandidate } from '../types'
 import { nfmt, ratingColor, goodreadsSearchUrl } from '../utils'
-import { SectionTitle, Card, Pill, BookCover } from '../components'
+import { SectionTitle, Card, Pill, BookCover, AuthorLink } from '../components'
 
 export function ViewDiscover() {
   const [source, setSource] = useState<string | null>(null)
@@ -42,6 +42,7 @@ export function ViewDiscover() {
           <span className="eyebrow" style={{ marginRight: 8 }}>Source</span>
           <Pill active={source === null} onClick={() => setSource(null)}>All</Pill>
           <Pill active={source === 'author'} onClick={() => setSource('author')}>Authors you love</Pill>
+          <Pill active={source === 'cf_author'} onClick={() => setSource('cf_author')}>New authors</Pill>
           <Pill active={source === 'subject'} onClick={() => setSource('subject')}>Subjects you rate high</Pill>
         </div>
 
@@ -133,7 +134,7 @@ function DiscoverCard({ candidate: c }: { candidate: DiscoveryCandidate }) {
             <a className="book-link" href={goodreadsSearchUrl(c.title, c.author)} target="_blank" rel="noreferrer">{c.title}</a>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-            {c.author}
+            <AuthorLink author={c.author} />
             {c.original_pub_year && (
               <span style={{ color: 'var(--muted-2)' }}> · {c.original_pub_year}</span>
             )}
@@ -213,6 +214,9 @@ function DiscoverCard({ candidate: c }: { candidate: DiscoveryCandidate }) {
 function _evidenceLabel(source: string, ev: Record<string, string | number>): string {
   if (source === 'author' && ev.author) {
     return `because you love ${ev.author} (${ev.your_avg}★ avg)`
+  }
+  if (source === 'cf_author' && ev.via_book) {
+    return `readers who loved «${ev.via_book}» also enjoy ${ev.new_author}`
   }
   if (source === 'subject' && ev.subject) {
     const sub = String(ev.subject)

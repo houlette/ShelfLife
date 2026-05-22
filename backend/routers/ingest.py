@@ -1,6 +1,7 @@
 import threading
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -318,6 +319,62 @@ def diversity_enrich_stop():
     return {"ok": True}
 
 
+@router.post("/diversity-enrich/reset")
+def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_db)):
+    """Clear diversity_enriched_at so affected authors are re-queried next run.
+
+    scope="unresolved"     — authors searched but no origin found (default).
+                             Enables the new Wikidata P27 fallback for them.
+    scope="middle_eastern" — authors tagged Middle Eastern.
+                             Use this to re-classify after the Jewish-bucket fix.
+    scope="all"            — every previously-searched author (full clean re-run).
+
+    Manual edits (author_diversity_manual=True) are always excluded from all scopes.
+    """
+    q = db.query(Book).filter(Book.author_diversity_manual.isnot(True))
+    if scope == "unresolved":
+        q = q.filter(
+            Book.diversity_enriched_at.isnot(None),
+            Book.author_ethnicity.is_(None),
+        )
+    elif scope == "middle_eastern":
+        q = q.filter(Book.author_ethnicity == "Middle Eastern")
+    elif scope == "all":
+        q = q.filter(Book.diversity_enriched_at.isnot(None))
+    else:
+        raise HTTPException(400, f"Unknown scope: {scope!r}")
+
+    count = q.update({"diversity_enriched_at": None}, synchronize_session=False)
+    db.commit()
+    return {"reset": count}
+
+
+class _UpdateAuthorDiversityBody(BaseModel):
+    author: str
+    gender: str | None = None        # canonical value or None to clear
+    ethnicity: str | None = None     # canonical group name or None to clear
+
+
+@router.patch("/author-diversity")
+def update_author_diversity(body: _UpdateAuthorDiversityBody, db: Session = Depends(get_db)):
+    """Set gender / ethnicity for every book by a given author and mark as manual.
+
+    Manually-edited authors are excluded from all reset scopes and from the
+    Wikidata enrichment write loop, so the values survive re-enrichment runs.
+    """
+    books = db.query(Book).filter(Book.author == body.author).all()
+    if not books:
+        raise HTTPException(404, f"No books found for author {body.author!r}")
+    now = datetime.utcnow()
+    for book in books:
+        book.author_gender = body.gender
+        book.author_ethnicity = body.ethnicity
+        book.author_diversity_manual = True
+        book.diversity_enriched_at = now
+    db.commit()
+    return {"updated": len(books)}
+
+
 @router.get("/diversity-enrich/status")
 def diversity_enrich_status(db: Session = Depends(get_db)):
     """Coverage stats + current background task state."""
@@ -418,7 +475,8 @@ def enrich_status(db: Session = Depends(get_db)):
     enriched = db.query(func.count(Book.id)).filter(Book.enriched_at != None).scalar() or 0
     with_cover = db.query(func.count(Book.id)).filter(Book.cover_url != None).scalar() or 0
     with_genre = db.query(func.count(Book.id)).filter(Book.genre != None).scalar() or 0
-    missing_covers = total - with_cover
+    # Books with no cover at all — both unenriched and enriched-but-missed.
+    missing_covers = db.query(func.count(Book.id)).filter(Book.cover_url == None).scalar() or 0
     with _enrich_lock:
         task = dict(_enrich_state)
     return {
@@ -430,6 +488,23 @@ def enrich_status(db: Session = Depends(get_db)):
         "missing_covers": missing_covers,
         "enrich_task": task,
     }
+
+
+@router.post("/enrich-covers")
+def enrich_covers(limit: int | None = None, db: Session = Depends(get_db)):
+    """Back-fill cover images for books that currently have none.
+
+    Tries two strategies per book:
+    1. Fetch the Work JSON (for books with ol_work_key) — often has covers that
+       the search index omits.
+    2. Re-run the ISBN / title search — useful for books OL didn't have indexed
+       when the original enrichment ran.
+    """
+    try:
+        result = ol.backfill_missing_covers(db, limit=limit)
+        return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @router.get("/status")
