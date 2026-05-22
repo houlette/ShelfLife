@@ -90,13 +90,15 @@ export function LineChart({
   })
   if (lastValid != null) areaPath += `L${xPos(lastValid)},${padT + innerH}Z`
 
-  // Nice integer ticks: step is a round number; start from 0 (or yDomain min)
+  // Nice integer ticks: step is a round number; start from 0 (or yDomain min).
+  // Skip any tick that falls outside the data range so no line renders off-chart.
   const tickOrigin = yDomain ? yDomain[0] : 0
   const step = niceStep(yMax - tickOrigin)
   const yTicks: { v: number; y: number; label: string }[] = []
   for (let v = tickOrigin; v <= yMax + step * 0.001; v += step) {
     const rv = Math.round(v)
     if (rv > yMax) break
+    if (rv < yMin) continue   // off the bottom of the chart — skip
     yTicks.push({ v: rv, y: yPos(rv), label: fmtTick(rv) })
   }
 

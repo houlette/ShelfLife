@@ -134,7 +134,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
             borderBottom: '1px solid var(--line-soft)',
           }}>
             <BookCover src={b.cover_url} title={b.title} width={32} height={48} />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.3 }}>
                 <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
               </div>

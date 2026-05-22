@@ -98,7 +98,7 @@ export function ViewAuthors({ books, range }: Props) {
                 alignItems: 'center', gap: 12, padding: '8px 0',
                 borderBottom: '1px solid var(--line-soft)',
               }}>
-                <div style={{ fontSize: 13, color: 'var(--ink)' }}><AuthorLink author={a.author} /></div>
+                <div style={{ fontSize: 13, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}><AuthorLink author={a.author} /></div>
                 <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{a.count}</div>
                 <div style={{ textAlign: 'right' }}>
                   {a.avgRating != null && <RatingStars rating={Math.round(a.avgRating)} size={10} />}

@@ -63,7 +63,7 @@ export function Scatter({
   }
 
   return (
-    <div ref={ref} style={{ width: '100%', height }}>
+    <div ref={ref} style={{ width: '100%', height, overflow: 'hidden' }}>
       <svg width={w} height={height}>
         {yTicks.map((t, i) => (
           <g key={'y' + i}>

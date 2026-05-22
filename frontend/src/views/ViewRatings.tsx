@@ -134,7 +134,7 @@ export function ViewRatings({ books, range, granularity }: Props) {
                     alignItems: 'center', gap: 12, padding: '8px 0',
                     borderBottom: '1px solid var(--line-soft)',
                   }}>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                       </div>
@@ -159,7 +159,7 @@ export function ViewRatings({ books, range, granularity }: Props) {
                     alignItems: 'center', gap: 12, padding: '8px 0',
                     borderBottom: '1px solid var(--line-soft)',
                   }}>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                       </div>

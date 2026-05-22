@@ -69,7 +69,7 @@ export function ViewGenres({ books, range }: Props) {
               .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
               .map(g => (
                 <div key={g.genre} style={{
-                  display: 'grid', gridTemplateColumns: '1fr 100px 60px',
+                  display: 'grid', gridTemplateColumns: '1fr 100px 80px',
                   alignItems: 'center', padding: '8px 0',
                   borderBottom: '1px solid var(--line-soft)',
                 }}>
