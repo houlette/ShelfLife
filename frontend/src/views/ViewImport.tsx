@@ -377,6 +377,8 @@ function EnrichmentSection() {
     queryFn: () => api.enrichStatus(),
     refetchInterval: 3000,
   })
+  const [enrichPending, setEnrichPending] = useState(false)
+  const [coversPending, setCoversPending] = useState(false)
 
   if (!status) return null
 
@@ -388,13 +390,23 @@ function EnrichmentSection() {
   const pct = status.total ? Math.round((status.enriched / status.total) * 100) : 0
 
   async function startEnrich() {
-    await api.enrichLibrary()
-    qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    setEnrichPending(true)
+    try {
+      await api.enrichLibrary()
+      qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    } finally {
+      setEnrichPending(false)
+    }
   }
 
   async function startCovers() {
-    await api.enrichCovers()
-    qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    setCoversPending(true)
+    try {
+      await api.enrichCovers()
+      qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    } finally {
+      setCoversPending(false)
+    }
   }
 
   // Progress label shown while a task runs
@@ -427,33 +439,33 @@ function EnrichmentSection() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           onClick={startEnrich}
-          disabled={isRunning || remaining <= 0}
+          disabled={isRunning || enrichPending || remaining <= 0}
           style={{
             padding: '10px 20px', fontSize: 13, borderRadius: 4,
-            background: remaining > 0 && !isRunning ? 'var(--ink)' : 'var(--surface)',
-            color: remaining > 0 && !isRunning ? 'var(--paper)' : 'var(--muted)',
+            background: remaining > 0 && !isRunning && !enrichPending ? 'var(--ink)' : 'var(--surface)',
+            color: remaining > 0 && !isRunning && !enrichPending ? 'var(--paper)' : 'var(--muted)',
             border: '1px solid var(--line)',
-            cursor: remaining > 0 && !isRunning ? 'pointer' : 'default',
+            cursor: remaining > 0 && !isRunning && !enrichPending ? 'pointer' : 'default',
             fontFamily: 'inherit',
           }}
         >
-          {isRunning && job === 'enrich' ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All enriched'}
+          {(isRunning && job === 'enrich') || enrichPending ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All enriched'}
         </button>
 
         {status.missing_covers > 0 && (
           <button
             onClick={startCovers}
-            disabled={isRunning}
+            disabled={isRunning || coversPending}
             style={{
               padding: '10px 20px', fontSize: 13, borderRadius: 4,
               background: 'transparent',
-              color: isRunning ? 'var(--muted)' : 'var(--ink)',
+              color: isRunning || coversPending ? 'var(--muted)' : 'var(--ink)',
               border: '1px solid var(--line)',
-              cursor: isRunning ? 'default' : 'pointer',
+              cursor: isRunning || coversPending ? 'default' : 'pointer',
               fontFamily: 'inherit',
             }}
           >
-            {isRunning && job === 'covers' ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
+            {(isRunning && job === 'covers') || coversPending ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
           </button>
         )}
       </div>
