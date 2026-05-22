@@ -586,8 +586,8 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
           gap: 12, padding: '9px 0', borderBottom: '1px solid var(--line-soft)',
           alignItems: 'center',
         }}>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--ink)' }}>
-            <AuthorLink author={a.author} />
+          <div style={{ overflow: 'hidden', minWidth: 0, fontSize: 13, color: 'var(--ink)' }}>
+            <AuthorLink author={a.author} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} />
           </div>
           <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{a.count}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
