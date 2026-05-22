@@ -60,7 +60,7 @@ function DropZone({ label, sublabel, loading, dragging, onDragOver, onDragLeave,
 
 function GoodreadsSection() {
   const [dragging, setDragging] = useState(false)
-  const [result, setResult] = useState<{ total_rows: number; inserted: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<{ total_rows: number; inserted: number; updated: number; errors: string[] } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const qc = useQueryClient()
@@ -100,9 +100,10 @@ function GoodreadsSection() {
       />
       {error && <ErrorBanner message={error} />}
       {result && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginTop: 20 }}>
           <StatCard label="Rows processed" value={result.total_rows} />
-          <StatCard label="Books imported" value={result.inserted} />
+          <StatCard label="New books" value={result.inserted} />
+          <StatCard label="Updated" value={result.updated} />
           <StatCard label="Errors" value={result.errors.length} color={result.errors.length ? 'var(--m1)' : 'var(--accent)'} />
         </div>
       )}

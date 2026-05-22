@@ -53,7 +53,17 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
     reader = csv.DictReader(io.StringIO(content))
     rows = list(reader)
 
+    existing_ids = {row[0] for row in db.query(Book.goodreads_book_id).all()}
+
+    # Fields that should never regress on re-import:
+    # - date_added: historical fact, preserve the original Goodreads add date
+    # - my_review / private_notes when None: don't overwrite existing user content
+    #   with an empty export (Goodreads sometimes omits review text on re-export)
+    NEVER_OVERWRITE = {"goodreads_book_id", "date_added"}
+    PRESERVE_IF_NULL = {"my_review", "private_notes"}
+
     inserted = 0
+    updated = 0
     errors: list[str] = []
 
     for row in rows:
@@ -100,11 +110,19 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
             .values(**entry)
             .on_conflict_do_update(
                 index_elements=["goodreads_book_id"],
-                set_={k: v for k, v in entry.items() if k != "goodreads_book_id"},
+                set_={
+                    k: v for k, v in entry.items()
+                    if k not in NEVER_OVERWRITE
+                    and not (k in PRESERVE_IF_NULL and v is None)
+                },
             )
         )
         db.execute(stmt)
-        inserted += 1
+
+        if book_id in existing_ids:
+            updated += 1
+        else:
+            inserted += 1
 
     db.commit()
 
@@ -112,5 +130,6 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
         "source": "goodreads",
         "total_rows": len(rows),
         "inserted": inserted,
+        "updated": updated,
         "errors": errors[:20],
     }
