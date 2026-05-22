@@ -20,7 +20,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
     const counts: Record<number, number> = {}
     for (const b of readBooks) {
       const y = b.original_pub_year ?? b.year_published
-      if (y) counts[y] = (counts[y] ?? 0) + 1
+      if (y && y > 0) counts[y] = (counts[y] ?? 0) + 1
     }
     return Object.entries(counts)
       .map(([year, count]) => ({ label: year, value: count }))
