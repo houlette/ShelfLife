@@ -20,7 +20,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
     const counts: Record<number, number> = {}
     for (const b of readBooks) {
       const y = b.original_pub_year ?? b.year_published
-      if (y) counts[y] = (counts[y] ?? 0) + 1
+      if (y && y > 0) counts[y] = (counts[y] ?? 0) + 1
     }
     return Object.entries(counts)
       .map(([year, count]) => ({ label: year, value: count }))
@@ -55,6 +55,9 @@ export function ViewTimeline({ books, range, granularity }: Props) {
     })
   }, [periods])
 
+  const datedCount = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0
+  const undatedCount = filtered.length - datedCount
+
   const pagesData = useMemo(() =>
     periods.map(p => ({ date: p.period, pages: p.pages })),
     [periods],
@@ -86,7 +89,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
         {/* Cumulative */}
-        <Card title="Cumulative books read" eyebrow="Running total" style={{ minWidth: 0 }}>
+        <Card title="Cumulative books read" eyebrow={undatedCount > 0 ? `${nfmt(datedCount)} of ${nfmt(filtered.length)} have a read date` : 'Running total'} style={{ minWidth: 0 }}>
           <LineChart data={cumulativeData} y="cumulative" height={200} color="var(--accent)" area smoothWindow={1} />
         </Card>
 

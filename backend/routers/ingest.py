@@ -231,6 +231,34 @@ def diversity_enrich_stop():
     return {"ok": True}
 
 
+@router.post("/diversity-enrich/reset")
+def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_db)):
+    """Clear diversity_enriched_at so affected authors are re-queried next run.
+
+    scope="unresolved"     — authors searched but no origin found (default).
+                             Enables the new Wikidata P27 fallback for them.
+    scope="middle_eastern" — authors tagged Middle Eastern.
+                             Use this to re-classify after the Jewish-bucket fix.
+    scope="all"            — every previously-searched author (full clean re-run).
+    """
+    q = db.query(Book)
+    if scope == "unresolved":
+        q = q.filter(
+            Book.diversity_enriched_at.isnot(None),
+            Book.author_ethnicity.is_(None),
+        )
+    elif scope == "middle_eastern":
+        q = q.filter(Book.author_ethnicity == "Middle Eastern")
+    elif scope == "all":
+        q = q.filter(Book.diversity_enriched_at.isnot(None))
+    else:
+        raise HTTPException(400, f"Unknown scope: {scope!r}")
+
+    count = q.update({"diversity_enriched_at": None}, synchronize_session=False)
+    db.commit()
+    return {"reset": count}
+
+
 @router.get("/diversity-enrich/status")
 def diversity_enrich_status(db: Session = Depends(get_db)):
     """Coverage stats + current background task state."""

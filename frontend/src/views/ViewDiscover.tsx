@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import type { DiscoveryCandidate } from '../types'
 import { nfmt, ratingColor, goodreadsSearchUrl } from '../utils'
-import { SectionTitle, Card, Pill, BookCover } from '../components'
+import { SectionTitle, Card, Pill, BookCover, AuthorLink } from '../components'
 
 export function ViewDiscover() {
   const [source, setSource] = useState<string | null>(null)
@@ -133,7 +133,7 @@ function DiscoverCard({ candidate: c }: { candidate: DiscoveryCandidate }) {
             <a className="book-link" href={goodreadsSearchUrl(c.title, c.author)} target="_blank" rel="noreferrer">{c.title}</a>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-            {c.author}
+            <AuthorLink author={c.author} />
             {c.original_pub_year && (
               <span style={{ color: 'var(--muted-2)' }}> · {c.original_pub_year}</span>
             )}

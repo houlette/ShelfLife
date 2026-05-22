@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import type { Recommendation } from '../types'
 import { nfmt, ratingColor, goodreadsUrl } from '../utils'
-import { SectionTitle, Card, Pill, BookCover } from '../components'
+import { SectionTitle, Card, Pill, BookCover, AuthorLink } from '../components'
 
 export function ViewRecommend() {
   const [genre, setGenre] = useState<string | null>(null)
@@ -91,7 +91,7 @@ function RecCard({ rec, rank, expanded, onToggle }: {
             <a className="book-link" href={goodreadsUrl(book.goodreads_book_id)} target="_blank" rel="noreferrer">{book.title}</a>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-            {book.author}
+            <AuthorLink author={book.author} />
             {book.original_pub_year && (
               <span style={{ color: 'var(--muted-2)' }}> · {book.original_pub_year}</span>
             )}

@@ -1,5 +1,19 @@
 import { useRef, useState, useEffect } from 'react'
 
+function niceStep(range: number): number {
+  if (range <= 0) return 1
+  const raw  = range / 4
+  const mag  = Math.pow(10, Math.floor(Math.log10(raw)))
+  const norm = raw / mag
+  const nice = norm <= 1.5 ? 1 : norm <= 3 ? 2 : norm <= 7 ? 5 : 10
+  return Math.max(1, nice * mag)
+}
+
+function fmtTick(v: number): string {
+  if (v >= 1000) return `${Math.round(v / 1000)}k`
+  return String(v)
+}
+
 interface BarData {
   label: string
   value: number
@@ -28,7 +42,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
 
   if (!data.length) return null
 
-  const padL = 32, padR = 8, padT = 12, padB = showAxis ? 32 : 8
+  const padL = 44, padR = 8, padT = 12, padB = showAxis ? 32 : 8
   const innerW = w - padL - padR
   const innerH = height - padT - padB
 
@@ -36,12 +50,32 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
   const barGap = 1
   const barW = Math.max(2, (innerW - barGap * (data.length - 1)) / data.length)
 
-  const yTicks: { v: number; y: number }[] = []
+  const step = niceStep(maxVal)
+  const yTicks: { v: number; label: string; y: number }[] = []
   if (showAxis) {
-    for (let i = 0; i <= 4; i++) {
-      const v = maxVal * (i / 4)
-      yTicks.push({ v, y: padT + (1 - i / 4) * innerH })
+    for (let v = 0; v <= maxVal + step * 0.001; v += step) {
+      const rv = Math.round(v)
+      if (rv > maxVal) break
+      yTicks.push({ v: rv, label: fmtTick(rv), y: padT + (1 - rv / maxVal) * innerH })
     }
+  }
+
+  // Pre-compute which x-labels to show, enforcing a minimum pixel gap so
+  // labels never overlap regardless of bar density or labelFilter.
+  const MIN_LABEL_GAP = 28
+  const visibleLabelIdx = new Set<number>()
+  if (showAxis) {
+    let lastLabelX = -Infinity
+    data.forEach((d, i) => {
+      const passes = labelFilter ? labelFilter(d.label, i) : barW > 18
+      if (passes) {
+        const cx = padL + i * (barW + barGap) + barW / 2
+        if (cx - lastLabelX >= MIN_LABEL_GAP) {
+          visibleLabelIdx.add(i)
+          lastLabelX = cx
+        }
+      }
+    })
   }
 
   return (
@@ -52,7 +86,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
             <line x1={padL} x2={w - padR} y1={t.y} y2={t.y} stroke="var(--line-soft)" strokeWidth={0.5} />
             <text x={padL - 6} y={t.y + 3} textAnchor="end"
               style={{ fontSize: 9.5, fill: 'var(--muted)' }} fontFamily="JetBrains Mono">
-              {Math.round(t.v)}
+              {t.label}
             </text>
           </g>
         ))}
@@ -66,7 +100,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
                 width={barW} height={h}
                 fill={d.color ?? color} opacity={0.85}
               />
-              {showAxis && (labelFilter ? labelFilter(d.label, i) : barW > 18) && (
+              {visibleLabelIdx.has(i) && (
                 <text
                   x={x + barW / 2} y={height - 8}
                   textAnchor="middle"

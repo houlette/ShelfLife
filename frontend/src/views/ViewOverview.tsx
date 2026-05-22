@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { Book } from '../types'
 import { nfmt, mean, effectiveDate, filterBooksByRange, aggregateBooks, ratingColor, goodreadsUrl } from '../utils'
 import type { Range, Granularity } from '../utils'
-import { SectionTitle, Stat, Card, BookCover } from '../components'
+import { SectionTitle, Stat, Card, BookCover, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { Sparkline, HBar, BarChart } from '../charts'
 
@@ -32,6 +32,8 @@ export function ViewOverview({ books, range, granularity }: Props) {
   }, [rated])
 
   const booksPerYear = useMemo(() => aggregateBooks(readBooks, 'year'), [readBooks])
+  const datedCount = useMemo(() => filtered.filter(b => b.date_read).length, [filtered])
+  const undatedCount = filtered.length - datedCount
 
   return (
     <div>
@@ -41,7 +43,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
 
       {/* Hero stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 48 }}>
-        <Stat label="Books read" value={nfmt(filtered.length)} size="lg" />
+        <Stat label="Books read" value={nfmt(filtered.length)} size="lg" sub={undatedCount > 0 ? `${nfmt(undatedCount)} without read date` : undefined} />
         <Stat label="Pages" value={nfmt(totalPages)} size="lg" />
         <Stat label="Authors" value={nfmt(uniqueAuthors)} size="lg" />
         <Stat label="Avg rating" value={avgRating != null ? avgRating.toFixed(1) : null} unit="/5" size="lg" />
@@ -81,7 +83,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
                     <div className="serif" style={{ fontSize: 16, color: 'var(--ink)', marginBottom: 4, lineHeight: 1.3 }}>
                       <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{b.author}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
                     <div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 6 }}>
                       {b.num_pages && `${nfmt(b.num_pages)} pages`}
                       {b.genre && b.num_pages && ' · '}
@@ -132,11 +134,11 @@ export function ViewOverview({ books, range, granularity }: Props) {
             borderBottom: '1px solid var(--line-soft)',
           }}>
             <BookCover src={b.cover_url} title={b.title} width={32} height={48} />
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.3 }}>
                 <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{b.author}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.genre ?? ''}</div>
             <RatingStars rating={b.my_rating} size={12} />
