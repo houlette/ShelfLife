@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useContext } from 'react'
 import type { Book } from '../types'
 import { nfmt, filterBooksByRange } from '../utils'
 import type { Range } from '../utils'
@@ -6,6 +6,7 @@ import { SectionTitle, Stat, Card, Pill, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { HBar } from '../charts'
 import { api } from '../api'
+import { NavigationContext } from '../context'
 import { useQueryClient } from '@tanstack/react-query'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function ViewAuthors({ books, range }: Props) {
+  const { navigateToAuthor } = useContext(NavigationContext)
   const readBooks = useMemo(() => books.filter(b => b.exclusive_shelf === 'read'), [books])
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
 
@@ -66,8 +68,9 @@ export function ViewAuthors({ books, range }: Props) {
     byAuthor.slice(0, 15).map(a => ({
       label: a.author.length > 20 ? a.author.slice(0, 18) + '…' : a.author,
       value: a.count,
+      onLabelClick: () => navigateToAuthor(a.author),
     })),
-    [byAuthor],
+    [byAuthor, navigateToAuthor],
   )
 
   return (
@@ -95,7 +98,7 @@ export function ViewAuthors({ books, range }: Props) {
                 alignItems: 'center', gap: 12, padding: '8px 0',
                 borderBottom: '1px solid var(--line-soft)',
               }}>
-                <div style={{ fontSize: 13, color: 'var(--ink)' }}>{a.author}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}><AuthorLink author={a.author} /></div>
                 <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>{a.count}</div>
                 <div style={{ textAlign: 'right' }}>
                   {a.avgRating != null && <RatingStars rating={Math.round(a.avgRating)} size={10} />}
@@ -660,7 +663,7 @@ function AuthorDiffList({ authors }: { authors: AuthorRow[] }) {
           borderTop: '1px solid var(--line-soft)',
         }}>
           <div>
-            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>{a.author}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}><AuthorLink author={a.author} /></div>
             <div style={{ fontSize: 10.5, color: 'var(--muted)' }}>{a.ratedCount} of {a.count} rated</div>
           </div>
           <div className="num" style={{ fontSize: 12, color: 'var(--ink)', textAlign: 'right' }}>{a.avgRating!.toFixed(2)}</div>

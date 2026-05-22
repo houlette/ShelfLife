@@ -136,7 +136,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
               <div style={{ fontSize: 14, color: 'var(--ink)', lineHeight: 1.3 }}>
                 <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{b.author}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.genre ?? ''}</div>
             <RatingStars rating={b.my_rating} size={12} />
