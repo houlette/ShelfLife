@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Book } from '../types'
 import { nfmt, filterBooksByRange } from '../utils'
 import type { Range } from '../utils'
-import { SectionTitle, Stat, Card, Pill } from '../components'
+import { SectionTitle, Stat, Card, Pill, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { HBar } from '../charts'
 import { api } from '../api'
@@ -11,10 +11,9 @@ import { useQueryClient } from '@tanstack/react-query'
 interface Props {
   books: Book[]
   range: Range
-  onAuthorClick?: (author: string) => void
 }
 
-export function ViewAuthors({ books, range, onAuthorClick }: Props) {
+export function ViewAuthors({ books, range }: Props) {
   const readBooks = useMemo(() => books.filter(b => b.exclusive_shelf === 'read'), [books])
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
 
@@ -130,7 +129,7 @@ export function ViewAuthors({ books, range, onAuthorClick }: Props) {
         <SectionTitle no="04" sub={`${nfmt(byAuthor.length)} authors in this period`}>
           All authors
         </SectionTitle>
-        <AuthorList authors={byAuthor} onAuthorClick={onAuthorClick} />
+        <AuthorList authors={byAuthor} />
       </div>
     </div>
   )
@@ -478,7 +477,7 @@ interface AuthorEntry {
   diff: number | null; ratedCount: number; totalPages: number; books: Book[]
 }
 
-function AuthorList({ authors, onAuthorClick }: { authors: AuthorEntry[]; onAuthorClick?: (author: string) => void }) {
+function AuthorList({ authors }: { authors: AuthorEntry[] }) {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<ListSortKey>('books')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -584,21 +583,8 @@ function AuthorList({ authors, onAuthorClick }: { authors: AuthorEntry[]; onAuth
           gap: 12, padding: '9px 0', borderBottom: '1px solid var(--line-soft)',
           alignItems: 'center',
         }}>
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {onAuthorClick
-              ? (
-                <button onClick={() => onAuthorClick(a.author)} style={{
-                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: 13, color: 'var(--accent)',
-                  textDecoration: 'none', textAlign: 'left',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  maxWidth: '100%',
-                }}>
-                  {a.author}
-                </button>
-              )
-              : <span style={{ fontSize: 13, color: 'var(--ink)' }}>{a.author}</span>
-            }
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, color: 'var(--ink)' }}>
+            <AuthorLink author={a.author} />
           </div>
           <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{a.count}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

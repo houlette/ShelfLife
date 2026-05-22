@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { Book } from '../types'
 import { nfmt, mean, effectiveDate, filterBooksByRange, aggregateBooks, ratingColor, goodreadsUrl } from '../utils'
 import type { Range, Granularity } from '../utils'
-import { SectionTitle, Stat, Card, BookCover } from '../components'
+import { SectionTitle, Stat, Card, BookCover, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { Sparkline, HBar, BarChart } from '../charts'
 
@@ -81,7 +81,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
                     <div className="serif" style={{ fontSize: 16, color: 'var(--ink)', marginBottom: 4, lineHeight: 1.3 }}>
                       <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{b.author}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
                     <div style={{ fontSize: 11, color: 'var(--muted-2)', marginTop: 6 }}>
                       {b.num_pages && `${nfmt(b.num_pages)} pages`}
                       {b.genre && b.num_pages && ' · '}

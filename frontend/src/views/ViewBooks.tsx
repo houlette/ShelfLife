@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import type { Book } from '../types'
 import { nfmt, effectiveDate, goodreadsUrl } from '../utils'
-import { SectionTitle, Pill, BookCover } from '../components'
+import { SectionTitle, Pill, BookCover, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 
 interface Props {
@@ -154,7 +154,7 @@ export function ViewBooks({ books, initialSearch, onSearchClear }: Props) {
           <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
             <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{b.author}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.genre ?? '—'}</div>
           <div><RatingStars rating={b.my_rating} size={10} /></div>
           <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>

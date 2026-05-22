@@ -16,6 +16,7 @@ import { ViewBooks }     from './views/ViewBooks'
 import { ViewImport }    from './views/ViewImport'
 import { ViewInsights }  from './views/ViewInsights'
 import { ViewSettings }  from './views/ViewSettings'
+import { NavigationContext } from './context'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } },
@@ -227,7 +228,10 @@ function AppShell() {
     )
   }
 
+  const navigateToAuthor = (name: string) => { setBookSearch(name); setView('books') }
+
   return (
+    <NavigationContext.Provider value={{ navigateToAuthor }}>
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', minHeight: '100vh' }}>
       <SideNav view={view} setView={setView} books={books} theme={theme} setTheme={setTheme} />
 
@@ -237,7 +241,7 @@ function AppShell() {
         {view === 'overview'  && <ViewOverview  books={books} range={range} granularity={granularity} />}
         {view === 'timeline'  && <ViewTimeline  books={books} range={range} granularity={granularity} />}
         {view === 'shelves'   && <ViewShelves   books={books} />}
-        {view === 'authors'   && <ViewAuthors   books={books} range={range} onAuthorClick={name => { setBookSearch(name); setView('books') }} />}
+        {view === 'authors'   && <ViewAuthors   books={books} range={range} />}
         {view === 'genres'    && <ViewGenres    books={books} range={range} />}
         {view === 'ratings'   && <ViewRatings   books={books} range={range} granularity={granularity} />}
         {view === 'books'     && <ViewBooks     books={books} initialSearch={bookSearch} onSearchClear={() => setBookSearch('')} />}
@@ -248,6 +252,7 @@ function AppShell() {
         {view === 'settings'  && <ViewSettings  theme={theme} setTheme={setTheme} />}
       </main>
     </div>
+    </NavigationContext.Provider>
   )
 }
 

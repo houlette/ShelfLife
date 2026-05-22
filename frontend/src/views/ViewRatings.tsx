@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { Book } from '../types'
 import { nfmt, mean, filterBooksByRange, aggregateBooks, ratingColor, goodreadsUrl } from '../utils'
 import type { Range, Granularity } from '../utils'
-import { SectionTitle, Card, Stat } from '../components'
+import { SectionTitle, Card, Stat, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { HBar, Scatter, LineChart } from '../charts'
 
@@ -138,7 +138,7 @@ export function ViewRatings({ books, range, granularity }: Props) {
                       <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.author}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
                     </div>
                     <div style={{ textAlign: 'center' }}><RatingStars rating={b.my_rating} size={10} /></div>
                     <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
@@ -163,7 +163,7 @@ export function ViewRatings({ books, range, granularity }: Props) {
                       <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.author}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
                     </div>
                     <div style={{ textAlign: 'center' }}><RatingStars rating={b.my_rating} size={10} /></div>
                     <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
