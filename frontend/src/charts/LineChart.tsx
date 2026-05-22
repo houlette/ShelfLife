@@ -1,6 +1,22 @@
 import { useRef, useState, useEffect } from 'react'
 import { rolling, mean } from '../utils'
 
+/** Round up to a "nice" whole-number step for axis ticks. */
+function niceStep(range: number): number {
+  if (range <= 0) return 1
+  const raw  = range / 4
+  const mag  = Math.pow(10, Math.floor(Math.log10(raw)))
+  const norm = raw / mag
+  const nice = norm <= 1.5 ? 1 : norm <= 3 ? 2 : norm <= 7 ? 5 : 10
+  return Math.max(1, nice * mag)
+}
+
+/** Compact axis label: 50000 → "50k", 1500000 → "1500k", 500 → "500". */
+function fmtTick(v: number): string {
+  if (v >= 1000) return `${Math.round(v / 1000)}k`
+  return String(v)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DataPoint = Record<string, any>
 
@@ -44,7 +60,7 @@ export function LineChart({
 
   if (!data.length) return null
 
-  const padL = 32, padR = 8, padT = 12, padB = showAxis ? 24 : 8
+  const padL = 44, padR = 8, padT = 12, padB = showAxis ? 24 : 8
   const innerW = w - padL - padR
   const innerH = height - padT - padB
 
@@ -74,10 +90,14 @@ export function LineChart({
   })
   if (lastValid != null) areaPath += `L${xPos(lastValid)},${padT + innerH}Z`
 
-  const yTicks: { v: number; y: number }[] = []
-  for (let i = 0; i <= 4; i++) {
-    const v = yMin + (yMax - yMin) * (i / 4)
-    yTicks.push({ v, y: yPos(v) })
+  // Nice integer ticks: step is a round number; start from 0 (or yDomain min)
+  const tickOrigin = yDomain ? yDomain[0] : 0
+  const step = niceStep(yMax - tickOrigin)
+  const yTicks: { v: number; y: number; label: string }[] = []
+  for (let v = tickOrigin; v <= yMax + step * 0.001; v += step) {
+    const rv = Math.round(v)
+    if (rv > yMax) break
+    yTicks.push({ v: rv, y: yPos(rv), label: fmtTick(rv) })
   }
 
   const xLabs: { i: number; label: number }[] = []
@@ -106,7 +126,7 @@ export function LineChart({
             <line x1={padL} x2={w - padR} y1={t.y} y2={t.y} stroke="var(--line-soft)" strokeWidth={0.5} />
             <text x={padL - 6} y={t.y + 3} textAnchor="end"
               style={{ fontSize: 9.5, fill: 'var(--muted)' }} fontFamily="JetBrains Mono">
-              {Math.round(t.v * 10) / 10}
+              {t.label}
             </text>
           </g>
         ))}
