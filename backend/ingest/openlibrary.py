@@ -111,7 +111,8 @@ _FIELDS_WITH_ISBN = FIELDS + ",isbn"
 
 
 def backfill_missing_covers(
-    db: Session, limit: int | None = None, rate_per_sec: float = 3.0
+    db: Session, limit: int | None = None, rate_per_sec: float = 3.0,
+    on_progress: Any = None,
 ) -> dict[str, Any]:
     """Back-fill ``cover_url`` for books that currently have none.
 
@@ -123,6 +124,8 @@ def backfill_missing_covers(
     On a successful hit, also writes back ``ol_work_key`` if it was previously
     missing.  Other fields (subjects, genre, ratings) are NOT touched so
     already-good data is preserved.
+
+    ``on_progress(dict)`` is called after every 10 books with running totals.
     """
     q = db.query(Book).filter(Book.cover_url == None)
     if limit:
@@ -130,7 +133,8 @@ def backfill_missing_covers(
     books = q.all()
 
     delay = 1.0 / rate_per_sec
-    checked = len(books)
+    total = len(books)
+    processed = 0
     filled = 0
     not_found = 0
 
@@ -156,10 +160,20 @@ def backfill_missing_covers(
         else:
             not_found += 1
 
+        processed += 1
+        if processed % 10 == 0:
+            db.commit()
+            if on_progress:
+                on_progress({"processed": processed, "enriched": filled,
+                             "not_found": not_found, "total": total})
+
         time.sleep(delay)
 
     db.commit()
-    return {"checked": checked, "filled": filled, "not_found": not_found}
+    if on_progress:
+        on_progress({"processed": processed, "enriched": filled,
+                     "not_found": not_found, "total": total})
+    return {"checked": total, "filled": filled, "not_found": not_found}
 
 
 def _fetch(isbn: str) -> dict[str, Any] | None:
@@ -276,7 +290,7 @@ def enrich_book(book: Book, doc: dict[str, Any]) -> bool:
 
 
 def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = None,
-               rate_per_sec: float = 5.0) -> dict[str, Any]:
+               rate_per_sec: float = 5.0, on_progress: Any = None) -> dict[str, Any]:
     """Enrich books from Open Library.
 
     For books with ISBN: query by ISBN (fast, precise).
@@ -284,6 +298,7 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
     and write back any ISBN found so future runs use the faster path.
 
     Rate-limited to be polite to the OL API.
+    ``on_progress(dict)`` is called at each 20-book commit with running totals.
     """
     q = db.query(Book)
     if only_unenriched:
@@ -325,10 +340,16 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
 
         if processed % 20 == 0:
             db.commit()
+            if on_progress:
+                on_progress({"processed": processed, "enriched": enriched,
+                             "not_found": not_found})
 
         time.sleep(delay)
 
     db.commit()
+    if on_progress:
+        on_progress({"processed": processed, "enriched": enriched,
+                     "not_found": not_found})
     return {
         "processed": processed,
         "enriched": enriched,

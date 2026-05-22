@@ -31,8 +31,14 @@ _enrich_state: dict = {
 def _run_enrich_bg(limit: int | None) -> None:
     from db.database import SessionLocal
     db = SessionLocal()
+
+    def _progress(totals: dict) -> None:
+        with _enrich_lock:
+            _enrich_state.update(totals)
+
     try:
-        result = ol.enrich_all(db, only_unenriched=True, limit=limit)
+        result = ol.enrich_all(db, only_unenriched=True, limit=limit,
+                               on_progress=_progress)
         with _enrich_lock:
             _enrich_state.update({
                 "running":   False,
@@ -68,8 +74,13 @@ def _run_enrich_bg(limit: int | None) -> None:
 def _run_covers_bg(limit: int | None) -> None:
     from db.database import SessionLocal
     db = SessionLocal()
+
+    def _progress(totals: dict) -> None:
+        with _enrich_lock:
+            _enrich_state.update(totals)
+
     try:
-        result = ol.backfill_missing_covers(db, limit=limit)
+        result = ol.backfill_missing_covers(db, limit=limit, on_progress=_progress)
         with _enrich_lock:
             _enrich_state.update({
                 "running":   False,
