@@ -65,6 +65,25 @@ export function ViewTimeline({ books, range, granularity }: Props) {
   const datedCount = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0
   const undatedCount = filtered.length - datedCount
 
+  const BUCKET = 50
+  const MAX_BUCKET = 500
+  const byPageCount = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const b of filtered) {
+      if (!b.num_pages || b.num_pages <= 0) continue
+      const bucket = b.num_pages > MAX_BUCKET
+        ? MAX_BUCKET + BUCKET       // overflow bin
+        : Math.ceil(b.num_pages / BUCKET) * BUCKET
+      counts[bucket] = (counts[bucket] ?? 0) + 1
+    }
+    const bins = []
+    for (let upper = BUCKET; upper <= MAX_BUCKET; upper += BUCKET) {
+      bins.push({ label: String(upper), value: counts[upper] ?? 0 })
+    }
+    bins.push({ label: '500+', value: counts[MAX_BUCKET + BUCKET] ?? 0 })
+    return bins
+  }, [filtered])
+
   const pagesData = useMemo(() =>
     periods.map(p => ({ date: p.period, pages: p.pages })),
     [periods],
@@ -105,6 +124,17 @@ export function ViewTimeline({ books, range, granularity }: Props) {
           <LineChart data={pagesData} y="pages" height={200} color="var(--accent-2)" smoothWindow={3} />
         </Card>
       </div>
+
+      {byPageCount.some(b => b.value > 0) && (
+        <Card title="Book length distribution" eyebrow="Pages per book" style={{ marginBottom: 32 }}>
+          <BarChart
+            data={byPageCount}
+            height={180}
+            color="var(--accent-2)"
+            labelFilter={l => Number(l.replace('+', '')) % 100 === 0 || l === '500+'}
+          />
+        </Card>
+      )}
 
       <Card
         title="When were the books you read published?"
