@@ -534,6 +534,9 @@ def enrich_all(
         try:
             result = enrich_author(author)
             for book in books:
+                # Never overwrite a value the user set manually
+                if book.author_diversity_manual:
+                    continue
                 book.diversity_enriched_at = now
                 if result["gender"]:
                     book.author_gender = result["gender"]

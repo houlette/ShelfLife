@@ -23,6 +23,7 @@ _MIGRATIONS = [
     ("books", "author_gender VARCHAR(20)"),
     ("books", "author_ethnicity VARCHAR(100)"),
     ("books", "diversity_enriched_at DATETIME"),
+    ("books", "author_diversity_manual BOOLEAN DEFAULT FALSE"),
 ]
 
 _INDEXES = [

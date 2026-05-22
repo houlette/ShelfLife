@@ -1,6 +1,7 @@
 import threading
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -240,8 +241,10 @@ def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_
     scope="middle_eastern" — authors tagged Middle Eastern.
                              Use this to re-classify after the Jewish-bucket fix.
     scope="all"            — every previously-searched author (full clean re-run).
+
+    Manual edits (author_diversity_manual=True) are always excluded from all scopes.
     """
-    q = db.query(Book)
+    q = db.query(Book).filter(Book.author_diversity_manual.isnot(True))
     if scope == "unresolved":
         q = q.filter(
             Book.diversity_enriched_at.isnot(None),
@@ -257,6 +260,32 @@ def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_
     count = q.update({"diversity_enriched_at": None}, synchronize_session=False)
     db.commit()
     return {"reset": count}
+
+
+class _UpdateAuthorDiversityBody(BaseModel):
+    author: str
+    gender: str | None = None        # canonical value or None to clear
+    ethnicity: str | None = None     # canonical group name or None to clear
+
+
+@router.patch("/author-diversity")
+def update_author_diversity(body: _UpdateAuthorDiversityBody, db: Session = Depends(get_db)):
+    """Set gender / ethnicity for every book by a given author and mark as manual.
+
+    Manually-edited authors are excluded from all reset scopes and from the
+    Wikidata enrichment write loop, so the values survive re-enrichment runs.
+    """
+    books = db.query(Book).filter(Book.author == body.author).all()
+    if not books:
+        raise HTTPException(404, f"No books found for author {body.author!r}")
+    now = datetime.utcnow()
+    for book in books:
+        book.author_gender = body.gender
+        book.author_ethnicity = body.ethnicity
+        book.author_diversity_manual = True
+        book.diversity_enriched_at = now
+    db.commit()
+    return {"updated": len(books)}
 
 
 @router.get("/diversity-enrich/status")

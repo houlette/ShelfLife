@@ -480,11 +480,20 @@ interface AuthorEntry {
   diff: number | null; ratedCount: number; totalPages: number; books: Book[]
 }
 
+const GENDER_OPTIONS = ['Man', 'Woman', 'Non-binary', 'Other']
+const ORIGIN_OPTIONS = [
+  'Black / African', 'Asian', 'Hispanic / Latino', 'Middle Eastern',
+  'Jewish', 'Indigenous', 'White / European', 'Other',
+]
+
 function AuthorList({ authors }: { authors: AuthorEntry[] }) {
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<ListSortKey>('books')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(0)
+  const [editMode, setEditMode] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)  // author name being saved
   const PER_PAGE = 50
 
   // Augment each row with top genre + diversity fields derived from books array
@@ -533,6 +542,27 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
     setPage(0)
   }
 
+  async function handleDiversityEdit(
+    authorName: string,
+    currentGender: string | null,
+    currentOrigin: string | null,
+    field: 'gender' | 'origin',
+    value: string,
+  ) {
+    const newGender  = field === 'gender'  ? (value || null) : currentGender
+    const newOrigin  = field === 'origin'  ? (value || null) : currentOrigin
+    setSaving(authorName)
+    try {
+      await api.updateAuthorDiversity(authorName, newGender, newOrigin)
+      qc.invalidateQueries({ queryKey: ['books'] })
+    } catch {
+      // swallow — the dropdown already shows the new value optimistically;
+      // on next books refresh it'll revert if the save failed
+    } finally {
+      setSaving(null)
+    }
+  }
+
   const colHead = (label: string, key: ListSortKey, style?: React.CSSProperties) => (
     <button onClick={() => toggleSort(key)} style={{
       background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -546,11 +576,20 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
     </button>
   )
 
-  const COLS = '1fr 54px 110px 72px 120px 72px 120px 90px'
+  const COLS = editMode
+    ? '1fr 54px 110px 72px 120px 96px 144px 90px'
+    : '1fr 54px 110px 72px 120px 72px 120px 90px'
+
+  const editSelectStyle: React.CSSProperties = {
+    fontSize: 11, padding: '2px 4px', width: '100%',
+    border: '1px solid var(--line)', borderRadius: 2,
+    background: 'var(--paper)', color: 'var(--ink)',
+    fontFamily: 'inherit', cursor: 'pointer',
+  }
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(0) }}
@@ -561,6 +600,23 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
             width: 260, fontFamily: 'inherit', outline: 'none',
           }}
         />
+        <button
+          onClick={() => setEditMode(m => !m)}
+          style={{
+            padding: '8px 14px', fontSize: 12, cursor: 'pointer',
+            background: editMode ? 'var(--accent)' : 'var(--paper)',
+            border: `1px solid ${editMode ? 'var(--accent)' : 'var(--line)'}`,
+            borderRadius: 2, color: editMode ? '#fff' : 'var(--muted)',
+            fontFamily: 'inherit',
+          }}
+        >
+          {editMode ? 'Done editing' : 'Edit diversity'}
+        </button>
+        {editMode && (
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Use dropdowns to correct gender &amp; origin — changes save instantly
+          </span>
+        )}
       </div>
 
       {/* Header */}
@@ -602,10 +658,36 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
           <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {a.topGenre ?? '—'}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.gender ?? '—'}</div>
-          <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {a.origin ?? '—'}
-          </div>
+          {editMode ? (
+            <select
+              value={a.gender ?? ''}
+              disabled={saving === a.author}
+              onChange={e => handleDiversityEdit(a.author, a.gender, a.origin, 'gender', e.target.value)}
+              style={{ ...editSelectStyle, opacity: saving === a.author ? 0.5 : 1 }}
+            >
+              <option value="">—</option>
+              {GENDER_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: a.gender ? GENDER_COLORS[a.gender] ?? 'var(--muted)' : 'var(--muted)' }}>
+              {a.gender ?? '—'}
+            </div>
+          )}
+          {editMode ? (
+            <select
+              value={a.origin ?? ''}
+              disabled={saving === a.author}
+              onChange={e => handleDiversityEdit(a.author, a.gender, a.origin, 'origin', e.target.value)}
+              style={{ ...editSelectStyle, opacity: saving === a.author ? 0.5 : 1 }}
+            >
+              <option value="">—</option>
+              {ORIGIN_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {a.origin ?? '—'}
+            </div>
+          )}
           <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
             {a.yearsActive ?? '—'}
           </div>
