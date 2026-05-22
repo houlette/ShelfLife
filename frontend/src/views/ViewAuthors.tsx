@@ -4,7 +4,8 @@ import { nfmt, filterBooksByRange } from '../utils'
 import type { Range } from '../utils'
 import { SectionTitle, Stat, Card, Pill, AuthorLink } from '../components'
 import { RatingStars } from '../components/RatingStars'
-import { HBar } from '../charts'
+import { HBar, StackedBarChart } from '../charts'
+import type { StackedBarDatum } from '../charts'
 import { api } from '../api'
 import { NavigationContext } from '../context'
 import { useQueryClient } from '@tanstack/react-query'
@@ -285,6 +286,27 @@ function DiversitySection({ books, readBooks }: { books: Book[]; readBooks: Book
       .sort((a, b) => b.value - a.value)
   }, [authorDemographics, authorRatingMap])
 
+  // Proportion of books read by gender per year — always from readBooks, independent of scope toggle
+  const genderByYear = useMemo((): StackedBarDatum[] => {
+    const byYear: Record<number, Record<string, number>> = {}
+    for (const b of readBooks) {
+      if (!b.date_read || !b.author_gender) continue
+      const year = new Date(b.date_read).getFullYear()
+      if (year < 2010) continue
+      ;(byYear[year] ??= {})[b.author_gender] = (byYear[year][b.author_gender] ?? 0) + 1
+    }
+    const genderOrder = ['Woman', 'Non-binary', 'Man']
+    return Object.entries(byYear)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .filter(([, counts]) => Object.values(counts).reduce((s, v) => s + v, 0) >= 5)
+      .map(([year, counts]) => ({
+        label: year,
+        segments: genderOrder
+          .filter(g => counts[g])
+          .map(g => ({ key: g, value: counts[g], color: GENDER_COLORS[g] })),
+      }))
+  }, [readBooks])
+
   async function runEnrichmentPoll() {
     // Fire-and-forget POST — returns immediately, enrichment runs in background
     await api.diversityEnrich()
@@ -461,6 +483,22 @@ function DiversitySection({ books, readBooks }: { books: Book[]; readBooks: Book
                   max={5}
                   format={v => v.toFixed(2)}
                 />
+              </Card>
+            </div>
+          )}
+
+          {genderByYear.length > 0 && (
+            <div style={{ marginTop: 24 }}>
+              <Card title="Gender mix by year" eyebrow="% of books read · years with 5+ attributed books">
+                <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+                  {(['Woman', 'Non-binary', 'Man'] as const).map(g => (
+                    <div key={g} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted)' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: GENDER_COLORS[g], opacity: 0.85, flexShrink: 0 }} />
+                      {g}
+                    </div>
+                  ))}
+                </div>
+                <StackedBarChart data={genderByYear} height={200} percent />
               </Card>
             </div>
           )}
