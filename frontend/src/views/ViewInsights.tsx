@@ -39,11 +39,20 @@ export function ViewInsights() {
             Failed to load insights. Is the ANTHROPIC_API_KEY set?
           </div>
         )}
-        {data && (
+        {data && (data.summary?.startsWith('Error') ? (
+          <div style={{ color: 'var(--m2)', fontSize: 13 }}>
+            {(() => {
+              const extracted = data.summary.match(/'message':\s*'([^']+)'/)?.[1]
+              return extracted
+                ? `Failed to generate insights: ${extracted}`
+                : 'Failed to generate insights. Check the ANTHROPIC_API_KEY and your account credits.'
+            })()}
+          </div>
+        ) : (
           <div className="serif" style={{ fontSize: 16, lineHeight: 1.7, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>
             {data.summary}
           </div>
-        )}
+        ))}
       </Card>
     </div>
   )

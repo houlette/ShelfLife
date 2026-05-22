@@ -22,7 +22,14 @@ export function ViewTimeline({ books, range, granularity }: Props) {
       const y = b.original_pub_year ?? b.year_published
       if (y && y > 0) counts[y] = (counts[y] ?? 0) + 1
     }
+    const allYears = Object.keys(counts).map(Number).sort((a, b) => a - b)
+    // Drop outlier years: any year more than 300 years before the median
+    // (handles e.g. a single ancient text creating a huge blank gap)
+    const cutoff = allYears.length
+      ? allYears[Math.floor(allYears.length / 2)] - 300
+      : 0
     return Object.entries(counts)
+      .filter(([year]) => Number(year) >= cutoff)
       .map(([year, count]) => ({ label: year, value: count }))
       .sort((a, b) => Number(a.label) - Number(b.label))
   }, [readBooks])
