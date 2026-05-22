@@ -228,6 +228,50 @@ function DiversitySection({ books }: { books: Book[] }) {
       .map(e => ({ label: e, value: counts[e] ?? 0, color: ETHNICITY_COLORS[e] }))
   }, [authorDemographics])
 
+  // Per-author average of rated books (my_rating > 0)
+  const authorRatingMap = useMemo(() => {
+    const byAuthor: Record<string, number[]> = {}
+    for (const b of books) {
+      if (!b.author || b.my_rating <= 0) continue
+      ;(byAuthor[b.author] ??= []).push(b.my_rating)
+    }
+    const out: Record<string, number> = {}
+    for (const [a, ratings] of Object.entries(byAuthor))
+      out[a] = ratings.reduce((s, r) => s + r, 0) / ratings.length
+    return out
+  }, [books])
+
+  // Average per-author rating grouped by gender (min 3 rated authors per group)
+  const ratingByGender = useMemo(() => {
+    const groups: Record<string, number[]> = {}
+    for (const [author, data] of Object.entries(authorDemographics)) {
+      const avg = authorRatingMap[author]
+      if (avg == null) continue
+      const key = data.gender ?? 'Unknown'
+      ;(groups[key] ??= []).push(avg)
+    }
+    const order = ['Man', 'Woman', 'Non-binary', 'Other', 'Unknown']
+    return order
+      .filter(g => (groups[g]?.length ?? 0) >= 3)
+      .map(g => ({ label: g, value: groups[g].reduce((s, v) => s + v, 0) / groups[g].length, color: GENDER_COLORS[g], count: groups[g].length }))
+      .sort((a, b) => b.value - a.value)
+  }, [authorDemographics, authorRatingMap])
+
+  // Average per-author rating grouped by cultural origin (min 3 rated authors per group)
+  const ratingByOrigin = useMemo(() => {
+    const groups: Record<string, number[]> = {}
+    for (const [author, data] of Object.entries(authorDemographics)) {
+      const avg = authorRatingMap[author]
+      if (avg == null) continue
+      const key = groupEthnicity(data.ethnicity)
+      ;(groups[key] ??= []).push(avg)
+    }
+    return ETHNICITY_ORDER
+      .filter(e => (groups[e]?.length ?? 0) >= 3)
+      .map(e => ({ label: e, value: groups[e].reduce((s, v) => s + v, 0) / groups[e].length, color: ETHNICITY_COLORS[e], count: groups[e].length }))
+      .sort((a, b) => b.value - a.value)
+  }, [authorDemographics, authorRatingMap])
+
   async function runEnrichmentPoll() {
     // Fire-and-forget POST — returns immediately, enrichment runs in background
     await api.diversityEnrich()
@@ -367,20 +411,41 @@ function DiversitySection({ books }: { books: Book[] }) {
           No demographic data yet. Click "Enrich from Wikidata" to start.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-          <Card title="Gender" eyebrow={`${nfmt(enrichedAuthors)} authors · all-time reads`} style={{ minWidth: 0 }}>
-            <HBar
-              items={genderBreakdown}
-              format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
-            />
-          </Card>
-          <Card title="Geographic / Cultural Origin" eyebrow="Wikipedia categories · Wikidata P27 nationality" style={{ minWidth: 0 }}>
-            <HBar
-              items={ethnicityBreakdown}
-              format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
-            />
-          </Card>
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            <Card title="Gender" eyebrow={`${nfmt(enrichedAuthors)} authors · all-time reads`} style={{ minWidth: 0 }}>
+              <HBar
+                items={genderBreakdown}
+                format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
+              />
+            </Card>
+            <Card title="Geographic / Cultural Origin" eyebrow="Wikipedia categories · Wikidata P27 nationality" style={{ minWidth: 0 }}>
+              <HBar
+                items={ethnicityBreakdown}
+                format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
+              />
+            </Card>
+          </div>
+
+          {(ratingByGender.length > 0 || ratingByOrigin.length > 0) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
+              <Card title="Avg rating by gender" eyebrow="per-author avg · rated authors only · ≥3 per group" style={{ minWidth: 0 }}>
+                <HBar
+                  items={ratingByGender}
+                  max={5}
+                  format={v => v.toFixed(2)}
+                />
+              </Card>
+              <Card title="Avg rating by origin" eyebrow="per-author avg · rated authors only · ≥3 per group" style={{ minWidth: 0 }}>
+                <HBar
+                  items={ratingByOrigin}
+                  max={5}
+                  format={v => v.toFixed(2)}
+                />
+              </Card>
+            </div>
+          )}
+        </>
       )}
 
       <div style={{ marginTop: 16, fontSize: 11, color: 'var(--muted-2)', lineHeight: 1.6 }}>
