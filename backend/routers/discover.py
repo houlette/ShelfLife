@@ -1,5 +1,6 @@
 """Discovery API — find new books outside the user's current shelf."""
 import json
+import threading
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,31 @@ from db.models import Book, DiscoveryCandidate
 from discover.pipeline import refresh_candidates
 
 router = APIRouter(prefix="/api/discover", tags=["discover"])
+
+# ---------------------------------------------------------------------------
+# Background refresh state
+# ---------------------------------------------------------------------------
+
+_refresh_lock = threading.Lock()
+_refresh_state: dict = {
+    "running":     False,
+    "last_result": None,   # dict from refresh_candidates on success
+    "error":       None,   # str on failure
+}
+
+
+def _run_refresh_bg() -> None:
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        result = refresh_candidates(db)
+        with _refresh_lock:
+            _refresh_state.update({"running": False, "last_result": result, "error": None})
+    except Exception as exc:
+        with _refresh_lock:
+            _refresh_state.update({"running": False, "error": str(exc)})
+    finally:
+        db.close()
 
 
 def _candidate_dict(c: DiscoveryCandidate) -> dict:
@@ -47,9 +73,21 @@ def _candidate_dict(c: DiscoveryCandidate) -> dict:
 
 
 @router.post("/refresh")
-def refresh(db: Session = Depends(get_db)):
-    """Regenerate discovery candidates from author/subject expansion. Idempotent."""
-    return refresh_candidates(db)
+def refresh():
+    """Start candidate regeneration in a background thread. Returns immediately."""
+    with _refresh_lock:
+        if _refresh_state["running"]:
+            return {"status": "already_running"}
+        _refresh_state.update({"running": True, "last_result": None, "error": None})
+    threading.Thread(target=_run_refresh_bg, daemon=True).start()
+    return {"status": "started"}
+
+
+@router.get("/refresh/status")
+def refresh_status():
+    """Poll this after POST /refresh to know when the job completes."""
+    with _refresh_lock:
+        return dict(_refresh_state)
 
 
 @router.get("")

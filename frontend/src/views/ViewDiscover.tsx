@@ -20,9 +20,17 @@ export function ViewDiscover() {
     setRefreshing(true)
     setRefreshResult(null)
     try {
-      const res = await api.discover.refresh()
-      setRefreshResult(res)
-      qc.invalidateQueries({ queryKey: ['discover'] })
+      await api.discover.refresh()
+      // Poll until the background job finishes
+      while (true) {
+        await new Promise(r => setTimeout(r, 3000))
+        const st = await api.discover.refreshStatus()
+        if (!st.running) {
+          if (st.last_result) setRefreshResult(st.last_result)
+          qc.invalidateQueries({ queryKey: ['discover'] })
+          break
+        }
+      }
     } finally {
       setRefreshing(false)
     }

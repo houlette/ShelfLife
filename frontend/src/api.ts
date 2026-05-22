@@ -76,6 +76,8 @@ export const api = {
       get<DiscoveryCandidate[]>('/discover', source ? { source } : undefined),
     refresh: () =>
       fetch(`${BASE}/discover/refresh`, { method: 'POST' }).then(r => r.json()),
+    refreshStatus: () =>
+      fetch(`${BASE}/discover/refresh/status`).then(r => r.json()),
     dismiss: (id: number) =>
       fetch(`${BASE}/discover/${id}/dismiss`, { method: 'POST' }).then(r => r.json()),
     addToShelf: (id: number) =>
