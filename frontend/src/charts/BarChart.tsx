@@ -44,6 +44,24 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
     }
   }
 
+  // Pre-compute which x-labels to show, enforcing a minimum pixel gap so
+  // labels never overlap regardless of bar density or labelFilter.
+  const MIN_LABEL_GAP = 28
+  const visibleLabelIdx = new Set<number>()
+  if (showAxis) {
+    let lastLabelX = -Infinity
+    data.forEach((d, i) => {
+      const passes = labelFilter ? labelFilter(d.label, i) : barW > 18
+      if (passes) {
+        const cx = padL + i * (barW + barGap) + barW / 2
+        if (cx - lastLabelX >= MIN_LABEL_GAP) {
+          visibleLabelIdx.add(i)
+          lastLabelX = cx
+        }
+      }
+    })
+  }
+
   return (
     <div ref={ref} style={{ width: '100%', height, overflow: 'hidden' }}>
       <svg width={w} height={height}>
@@ -66,7 +84,7 @@ export function BarChart({ data, height = 200, color = 'var(--accent)', showAxis
                 width={barW} height={h}
                 fill={d.color ?? color} opacity={0.85}
               />
-              {showAxis && (labelFilter ? labelFilter(d.label, i) : barW > 18) && (
+              {visibleLabelIdx.has(i) && (
                 <text
                   x={x + barW / 2} y={height - 8}
                   textAnchor="middle"

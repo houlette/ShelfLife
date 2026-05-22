@@ -81,11 +81,22 @@ export function LineChart({
   }
 
   const xLabs: { i: number; label: number }[] = []
-  let lastYear: number | null = null
-  data.forEach((d, i) => {
-    const yr = typeof d[x] === 'string' ? +String(d[x]).slice(0, 4) : null
-    if (yr && yr !== lastYear) { xLabs.push({ i, label: yr }); lastYear = yr }
-  })
+  if (data.length > 1) {
+    let lastYear: number | null = null
+    let lastLabelX = -Infinity
+    const MIN_GAP = 38  // px between label centres — keeps 4-digit years readable
+    data.forEach((d, i) => {
+      const yr = typeof d[x] === 'string' ? +String(d[x]).slice(0, 4) : null
+      if (yr && yr !== lastYear) {
+        lastYear = yr
+        const xi = xPos(i)
+        if (xi - lastLabelX >= MIN_GAP) {
+          xLabs.push({ i, label: yr })
+          lastLabelX = xi
+        }
+      }
+    })
+  }
 
   return (
     <div ref={ref} style={{ width: '100%', height, overflow: 'hidden' }}>
