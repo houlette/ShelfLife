@@ -191,6 +191,57 @@ def _fetch_by_title_author(title: str, author: str | None) -> dict[str, Any] | N
         return None
 
 
+def backfill_missing_covers(
+    db: Session, limit: int | None = None, rate_per_sec: float = 3.0
+) -> dict[str, Any]:
+    """Back-fill ``cover_url`` for books that currently have none.
+
+    Re-runs the OL ISBN (or title) search for every cover-less book.  The
+    original enrichment run may have found these books without a ``cover_i``
+    (OL's search index lags behind their cover uploads), or returned nothing
+    at all if the book wasn't indexed yet.
+
+    On a successful hit, also writes back ``ol_work_key`` if it was previously
+    missing.  Other fields (subjects, genre, ratings) are NOT touched so
+    already-good data is preserved.
+    """
+    q = db.query(Book).filter(Book.cover_url == None)
+    if limit:
+        q = q.limit(limit)
+    books = q.all()
+
+    delay = 1.0 / rate_per_sec
+    checked = len(books)
+    filled = 0
+    not_found = 0
+
+    for b in books:
+        isbn = b.isbn13 or b.isbn
+        if isbn:
+            doc = _fetch(isbn)
+        elif b.title:
+            doc = _fetch_by_title_author(b.title, b.author)
+        else:
+            doc = None
+
+        cover_i = doc.get("cover_i") if doc else None
+
+        if cover_i:
+            b.cover_url = f"{COVER_BASE}/{cover_i}-M.jpg"
+            if not b.ol_work_key and doc and doc.get("key"):
+                b.ol_work_key = doc["key"]
+            if not b.enriched_at:
+                b.enriched_at = datetime.utcnow()
+            filled += 1
+        else:
+            not_found += 1
+
+        time.sleep(delay)
+
+    db.commit()
+    return {"checked": checked, "filled": filled, "not_found": not_found}
+
+
 def enrich_book(book: Book, doc: dict[str, Any]) -> bool:
     """Apply enrichment data to a book. Returns True if anything was set."""
     changed = False

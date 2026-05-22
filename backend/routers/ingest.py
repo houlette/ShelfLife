@@ -14,6 +14,78 @@ import ingest.openlibrary as ol
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
 # ---------------------------------------------------------------------------
+# OL enrichment background task state
+# ---------------------------------------------------------------------------
+
+_enrich_lock  = threading.Lock()
+_enrich_state: dict = {
+    "running":    False,
+    "job":        None,   # "enrich" | "covers"
+    "processed":  0,
+    "enriched":   0,
+    "not_found":  0,
+    "errors":     0,
+}
+
+
+def _run_enrich_bg(limit: int | None) -> None:
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        result = ol.enrich_all(db, only_unenriched=True, limit=limit)
+        with _enrich_lock:
+            _enrich_state.update({
+                "running":   False,
+                "processed": result.get("processed", 0),
+                "enriched":  result.get("enriched", 0),
+                "not_found": result.get("not_found", 0),
+            })
+        # Log it
+        db2 = SessionLocal()
+        try:
+            from db.models import IngestLog as _IL
+            log = _IL(
+                source="openlibrary",
+                filename=f"enrich (limit={limit})",
+                records_inserted=result.get("enriched", 0),
+                records_updated=0,
+                ingested_at=datetime.utcnow(),
+                status="ok",
+                message=None,
+            )
+            db2.add(log)
+            db2.commit()
+        finally:
+            db2.close()
+    except Exception:
+        with _enrich_lock:
+            _enrich_state["running"] = False
+            _enrich_state["errors"] += 1
+    finally:
+        db.close()
+
+
+def _run_covers_bg(limit: int | None) -> None:
+    from db.database import SessionLocal
+    db = SessionLocal()
+    try:
+        result = ol.backfill_missing_covers(db, limit=limit)
+        with _enrich_lock:
+            _enrich_state.update({
+                "running":   False,
+                "processed": result.get("checked", 0),
+                "enriched":  result.get("filled", 0),
+                "not_found": result.get("not_found", 0),
+            })
+    except Exception:
+        with _enrich_lock:
+            _enrich_state["running"] = False
+            _enrich_state["errors"] += 1
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # Diversity enrichment background task state
 # ---------------------------------------------------------------------------
 
@@ -176,25 +248,40 @@ def resolve_pending(
     return {"ok": True}
 
 
+@router.post("/enrich-covers")
+def enrich_covers(limit: int | None = None):
+    """Start cover backfill in a background thread.  Returns immediately.
+
+    Calling while a job is already running returns the current state without
+    starting a second thread.
+    """
+    with _enrich_lock:
+        if _enrich_state["running"]:
+            return {"status": "already_running", **_enrich_state}
+        _enrich_state.update({
+            "running": True, "job": "covers",
+            "processed": 0, "enriched": 0, "not_found": 0, "errors": 0,
+        })
+    threading.Thread(target=_run_covers_bg, args=(limit,), daemon=True).start()
+    return {"status": "started"}
+
+
 @router.post("/enrich")
-def enrich_library(limit: int | None = None, db: Session = Depends(get_db)):
-    """Trigger Open Library enrichment for unenriched books with ISBNs."""
-    try:
-        result = ol.enrich_all(db, only_unenriched=True, limit=limit)
-        log = IngestLog(
-            source="openlibrary",
-            filename=f"enrich (limit={limit})",
-            records_inserted=result["enriched"],
-            records_updated=0,
-            ingested_at=datetime.utcnow(),
-            status="ok",
-            message=None,
-        )
-        db.add(log)
-        db.commit()
-        return result
-    except Exception as e:
-        raise HTTPException(500, str(e))
+def enrich_library(limit: int | None = None):
+    """Start OL enrichment in a background thread.  Returns immediately.
+
+    Calling while a job is already running returns the current state without
+    starting a second thread.
+    """
+    with _enrich_lock:
+        if _enrich_state["running"]:
+            return {"status": "already_running", **_enrich_state}
+        _enrich_state.update({
+            "running": True, "job": "enrich",
+            "processed": 0, "enriched": 0, "not_found": 0, "errors": 0,
+        })
+    threading.Thread(target=_run_enrich_bg, args=(limit,), daemon=True).start()
+    return {"status": "started"}
 
 
 @router.post("/diversity-enrich")
@@ -389,8 +476,9 @@ def enrich_status(db: Session = Depends(get_db)):
     with_cover = db.query(func.count(Book.id)).filter(Book.cover_url != None).scalar() or 0
     with_genre = db.query(func.count(Book.id)).filter(Book.genre != None).scalar() or 0
     # Books with no cover at all — both unenriched and enriched-but-missed.
-    # The backfill endpoint can retry these.
     missing_covers = db.query(func.count(Book.id)).filter(Book.cover_url == None).scalar() or 0
+    with _enrich_lock:
+        task = dict(_enrich_state)
     return {
         "total": total,
         "with_isbn": with_isbn,
@@ -398,6 +486,7 @@ def enrich_status(db: Session = Depends(get_db)):
         "with_cover": with_cover,
         "with_genre": with_genre,
         "missing_covers": missing_covers,
+        "enrich_task": task,
     }
 
 

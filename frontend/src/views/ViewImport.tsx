@@ -372,50 +372,61 @@ function CFSection() {
 
 function EnrichmentSection() {
   const qc = useQueryClient()
-  const { data: status, refetch } = useQuery({
+  const { data: status } = useQuery({
     queryKey: ['enrich-status'],
     queryFn: () => api.enrichStatus(),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
   })
-  const [running, setRunning] = useState(false)
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillResult, setBackfillResult] = useState<{ checked: number; filled: number; not_found: number } | null>(null)
-
-  async function startEnrich() {
-    setRunning(true)
-    try {
-      await api.enrichLibrary()
-      qc.invalidateQueries({ queryKey: ['books'] })
-      qc.invalidateQueries({ queryKey: ['genres'] })
-      refetch()
-    } finally {
-      setRunning(false)
-    }
-  }
-
-  async function startBackfillCovers() {
-    setBackfilling(true)
-    setBackfillResult(null)
-    try {
-      const res = await api.enrichCovers()
-      setBackfillResult(res)
-      qc.invalidateQueries({ queryKey: ['books'] })
-      refetch()
-    } finally {
-      setBackfilling(false)
-    }
-  }
+  const [enrichPending, setEnrichPending] = useState(false)
+  const [coversPending, setCoversPending] = useState(false)
 
   if (!status) return null
 
+  const task = status.enrich_task
+  const isRunning = task?.running ?? false
+  const job = task?.job ?? null
+
   const remaining = status.total - status.enriched
   const pct = status.total ? Math.round((status.enriched / status.total) * 100) : 0
+
+  async function startEnrich() {
+    setEnrichPending(true)
+    try {
+      await api.enrichLibrary()
+      qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    } finally {
+      setEnrichPending(false)
+    }
+  }
+
+  async function startCovers() {
+    setCoversPending(true)
+    try {
+      await api.enrichCovers()
+      qc.invalidateQueries({ queryKey: ['enrich-status'] })
+    } finally {
+      setCoversPending(false)
+    }
+  }
+
+  // Progress label shown while a task runs
+  function progressLine() {
+    if (!isRunning || !task) return null
+    const label = job === 'covers' ? 'Fetching covers' : 'Enriching'
+    return (
+      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
+        {label}… {nfmt(task.processed)} processed · {nfmt(task.enriched)} updated
+        {task.not_found > 0 && ` · ${nfmt(task.not_found)} not found`}
+      </div>
+    )
+  }
 
   return (
     <Card title="Enrich from Open Library" eyebrow="Add covers, genres, and ratings" style={{ marginTop: 32 }}>
       <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
         Fetches cover art, subjects (normalized to genres), and community ratings from
-        Open Library for each book with an ISBN. Rate-limited to ~5 books/sec.
+        Open Library for each book with an ISBN. Books without an ISBN are looked up by
+        title and author. Rate-limited to ~5 books/sec.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
@@ -425,45 +436,41 @@ function EnrichmentSection() {
         <StatCard label="With genre" value={nfmt(status.with_genre)} />
       </div>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <button
           onClick={startEnrich}
-          disabled={running || remaining <= 0}
+          disabled={isRunning || enrichPending || remaining <= 0}
           style={{
             padding: '10px 20px', fontSize: 13, borderRadius: 4,
-            background: remaining > 0 ? 'var(--ink)' : 'var(--surface)',
-            color: remaining > 0 ? 'var(--paper)' : 'var(--muted)',
+            background: remaining > 0 && !isRunning && !enrichPending ? 'var(--ink)' : 'var(--surface)',
+            color: remaining > 0 && !isRunning && !enrichPending ? 'var(--paper)' : 'var(--muted)',
             border: '1px solid var(--line)',
-            cursor: remaining > 0 && !running ? 'pointer' : 'default',
+            cursor: remaining > 0 && !isRunning && !enrichPending ? 'pointer' : 'default',
             fontFamily: 'inherit',
           }}
         >
-          {running ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All caught up'}
+          {(isRunning && job === 'enrich') || enrichPending ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All enriched'}
         </button>
 
-        {(status.missing_covers ?? 0) > 0 && (
+        {status.missing_covers > 0 && (
           <button
-            onClick={startBackfillCovers}
-            disabled={backfilling}
+            onClick={startCovers}
+            disabled={isRunning || coversPending}
             style={{
               padding: '10px 20px', fontSize: 13, borderRadius: 4,
-              background: 'transparent', color: 'var(--ink)',
+              background: 'transparent',
+              color: isRunning || coversPending ? 'var(--muted)' : 'var(--ink)',
               border: '1px solid var(--line)',
-              cursor: backfilling ? 'default' : 'pointer',
+              cursor: isRunning || coversPending ? 'default' : 'pointer',
               fontFamily: 'inherit',
             }}
           >
-            {backfilling ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
+            {(isRunning && job === 'covers') || coversPending ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
           </button>
         )}
       </div>
 
-      {backfillResult && (
-        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)' }}>
-          Checked {nfmt(backfillResult.checked)} books — filled {nfmt(backfillResult.filled)} covers
-          {backfillResult.not_found > 0 && `, ${nfmt(backfillResult.not_found)} still not found in OL`}.
-        </div>
-      )}
+      {progressLine()}
     </Card>
   )
 }
