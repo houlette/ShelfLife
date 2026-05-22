@@ -44,6 +44,8 @@ export const api = {
   enrichStatus: () => get<EnrichStatus>('/ingest/enrich/status'),
   enrichLibrary: () =>
     fetch(`${BASE}/ingest/enrich`, { method: 'POST' }).then(r => r.json()),
+  enrichCovers: () =>
+    fetch(`${BASE}/ingest/enrich-covers`, { method: 'POST' }).then(r => r.json()),
 
   diversityStatus: () => get<{
     total_read: number; total_authors: number;

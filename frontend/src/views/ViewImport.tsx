@@ -378,6 +378,8 @@ function EnrichmentSection() {
     refetchInterval: 5000,
   })
   const [running, setRunning] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ checked: number; filled: number; not_found: number } | null>(null)
 
   async function startEnrich() {
     setRunning(true)
@@ -388,6 +390,19 @@ function EnrichmentSection() {
       refetch()
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function startBackfillCovers() {
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const res = await api.enrichCovers()
+      setBackfillResult(res)
+      qc.invalidateQueries({ queryKey: ['books'] })
+      refetch()
+    } finally {
+      setBackfilling(false)
     }
   }
 
@@ -410,20 +425,45 @@ function EnrichmentSection() {
         <StatCard label="With genre" value={nfmt(status.with_genre)} />
       </div>
 
-      <button
-        onClick={startEnrich}
-        disabled={running || remaining <= 0}
-        style={{
-          padding: '10px 20px', fontSize: 13, borderRadius: 4,
-          background: remaining > 0 ? 'var(--ink)' : 'var(--surface)',
-          color: remaining > 0 ? 'var(--paper)' : 'var(--muted)',
-          border: '1px solid var(--line)',
-          cursor: remaining > 0 && !running ? 'pointer' : 'default',
-          fontFamily: 'inherit',
-        }}
-      >
-        {running ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All caught up'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          onClick={startEnrich}
+          disabled={running || remaining <= 0}
+          style={{
+            padding: '10px 20px', fontSize: 13, borderRadius: 4,
+            background: remaining > 0 ? 'var(--ink)' : 'var(--surface)',
+            color: remaining > 0 ? 'var(--paper)' : 'var(--muted)',
+            border: '1px solid var(--line)',
+            cursor: remaining > 0 && !running ? 'pointer' : 'default',
+            fontFamily: 'inherit',
+          }}
+        >
+          {running ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All caught up'}
+        </button>
+
+        {(status.missing_covers ?? 0) > 0 && (
+          <button
+            onClick={startBackfillCovers}
+            disabled={backfilling}
+            style={{
+              padding: '10px 20px', fontSize: 13, borderRadius: 4,
+              background: 'transparent', color: 'var(--ink)',
+              border: '1px solid var(--line)',
+              cursor: backfilling ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {backfilling ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
+          </button>
+        )}
+      </div>
+
+      {backfillResult && (
+        <div style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)' }}>
+          Checked {nfmt(backfillResult.checked)} books — filled {nfmt(backfillResult.filled)} covers
+          {backfillResult.not_found > 0 && `, ${nfmt(backfillResult.not_found)} still not found in OL`}.
+        </div>
+      )}
     </Card>
   )
 }

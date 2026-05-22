@@ -42,6 +42,7 @@ export interface EnrichStatus {
   enriched: number
   with_cover: number
   with_genre: number
+  missing_covers: number
 }
 
 export interface ReadingPeriod {
