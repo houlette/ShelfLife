@@ -42,6 +42,7 @@ export function ViewDiscover() {
           <span className="eyebrow" style={{ marginRight: 8 }}>Source</span>
           <Pill active={source === null} onClick={() => setSource(null)}>All</Pill>
           <Pill active={source === 'author'} onClick={() => setSource('author')}>Authors you love</Pill>
+          <Pill active={source === 'cf_author'} onClick={() => setSource('cf_author')}>New authors</Pill>
           <Pill active={source === 'subject'} onClick={() => setSource('subject')}>Subjects you rate high</Pill>
         </div>
 
@@ -213,6 +214,9 @@ function DiscoverCard({ candidate: c }: { candidate: DiscoveryCandidate }) {
 function _evidenceLabel(source: string, ev: Record<string, string | number>): string {
   if (source === 'author' && ev.author) {
     return `because you love ${ev.author} (${ev.your_avg}★ avg)`
+  }
+  if (source === 'cf_author' && ev.via_book) {
+    return `readers who loved «${ev.via_book}» also enjoy ${ev.new_author}`
   }
   if (source === 'subject' && ev.subject) {
     const sub = String(ev.subject)
