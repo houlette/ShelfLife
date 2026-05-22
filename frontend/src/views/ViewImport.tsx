@@ -372,35 +372,49 @@ function CFSection() {
 
 function EnrichmentSection() {
   const qc = useQueryClient()
-  const { data: status, refetch } = useQuery({
+  const { data: status } = useQuery({
     queryKey: ['enrich-status'],
     queryFn: () => api.enrichStatus(),
-    refetchInterval: 5000,
+    refetchInterval: 3000,
   })
-  const [running, setRunning] = useState(false)
-
-  async function startEnrich() {
-    setRunning(true)
-    try {
-      await api.enrichLibrary()
-      qc.invalidateQueries({ queryKey: ['books'] })
-      qc.invalidateQueries({ queryKey: ['genres'] })
-      refetch()
-    } finally {
-      setRunning(false)
-    }
-  }
 
   if (!status) return null
 
+  const task = status.enrich_task
+  const isRunning = task?.running ?? false
+  const job = task?.job ?? null
+
   const remaining = status.total - status.enriched
   const pct = status.total ? Math.round((status.enriched / status.total) * 100) : 0
+
+  async function startEnrich() {
+    await api.enrichLibrary()
+    qc.invalidateQueries({ queryKey: ['enrich-status'] })
+  }
+
+  async function startCovers() {
+    await api.enrichCovers()
+    qc.invalidateQueries({ queryKey: ['enrich-status'] })
+  }
+
+  // Progress label shown while a task runs
+  function progressLine() {
+    if (!isRunning || !task) return null
+    const label = job === 'covers' ? 'Fetching covers' : 'Enriching'
+    return (
+      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--muted)' }}>
+        {label}… {nfmt(task.processed)} processed · {nfmt(task.enriched)} updated
+        {task.not_found > 0 && ` · ${nfmt(task.not_found)} not found`}
+      </div>
+    )
+  }
 
   return (
     <Card title="Enrich from Open Library" eyebrow="Add covers, genres, and ratings" style={{ marginTop: 32 }}>
       <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
         Fetches cover art, subjects (normalized to genres), and community ratings from
-        Open Library for each book with an ISBN. Rate-limited to ~5 books/sec.
+        Open Library for each book with an ISBN. Books without an ISBN are looked up by
+        title and author. Rate-limited to ~5 books/sec.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
@@ -410,20 +424,41 @@ function EnrichmentSection() {
         <StatCard label="With genre" value={nfmt(status.with_genre)} />
       </div>
 
-      <button
-        onClick={startEnrich}
-        disabled={running || remaining <= 0}
-        style={{
-          padding: '10px 20px', fontSize: 13, borderRadius: 4,
-          background: remaining > 0 ? 'var(--ink)' : 'var(--surface)',
-          color: remaining > 0 ? 'var(--paper)' : 'var(--muted)',
-          border: '1px solid var(--line)',
-          cursor: remaining > 0 && !running ? 'pointer' : 'default',
-          fontFamily: 'inherit',
-        }}
-      >
-        {running ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All caught up'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          onClick={startEnrich}
+          disabled={isRunning || remaining <= 0}
+          style={{
+            padding: '10px 20px', fontSize: 13, borderRadius: 4,
+            background: remaining > 0 && !isRunning ? 'var(--ink)' : 'var(--surface)',
+            color: remaining > 0 && !isRunning ? 'var(--paper)' : 'var(--muted)',
+            border: '1px solid var(--line)',
+            cursor: remaining > 0 && !isRunning ? 'pointer' : 'default',
+            fontFamily: 'inherit',
+          }}
+        >
+          {isRunning && job === 'enrich' ? 'Enriching…' : remaining > 0 ? `Enrich ${nfmt(remaining)} books` : 'All enriched'}
+        </button>
+
+        {status.missing_covers > 0 && (
+          <button
+            onClick={startCovers}
+            disabled={isRunning}
+            style={{
+              padding: '10px 20px', fontSize: 13, borderRadius: 4,
+              background: 'transparent',
+              color: isRunning ? 'var(--muted)' : 'var(--ink)',
+              border: '1px solid var(--line)',
+              cursor: isRunning ? 'default' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {isRunning && job === 'covers' ? 'Fetching covers…' : `Backfill ${nfmt(status.missing_covers)} missing covers`}
+          </button>
+        )}
+      </div>
+
+      {progressLine()}
     </Card>
   )
 }

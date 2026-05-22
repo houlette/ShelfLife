@@ -1,5 +1,5 @@
 from pathlib import Path
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from .models import Base
 
@@ -7,6 +7,23 @@ DB_PATH = Path(__file__).parent.parent.parent / "data" / "shelflife.db"
 DB_PATH.parent.mkdir(exist_ok=True)
 
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, _record):
+    """Enable WAL journal mode on every new connection.
+
+    WAL (Write-Ahead Logging) lets readers proceed concurrently with a writer
+    instead of waiting for an exclusive lock.  Without this, long-running write
+    operations (enrichment, cover backfill) block every read request — including
+    the initial books fetch that the UI needs to render.
+
+    PRAGMA synchronous=NORMAL is safe with WAL and ~3× faster than FULL.
+    """
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA synchronous=NORMAL")
+    cur.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 _MIGRATIONS = [

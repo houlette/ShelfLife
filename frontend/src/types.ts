@@ -36,12 +36,23 @@ export interface GenreStat {
   avg_rating: number | null
 }
 
+export interface EnrichTask {
+  running: boolean
+  job: 'enrich' | 'covers' | null
+  processed: number
+  enriched: number
+  not_found: number
+  errors: number
+}
+
 export interface EnrichStatus {
   total: number
   with_isbn: number
   enriched: number
   with_cover: number
   with_genre: number
+  missing_covers: number
+  enrich_task: EnrichTask
 }
 
 export interface ReadingPeriod {
