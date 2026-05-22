@@ -501,23 +501,6 @@ def enrich_status(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/enrich-covers")
-def enrich_covers(limit: int | None = None, db: Session = Depends(get_db)):
-    """Back-fill cover images for books that currently have none.
-
-    Tries two strategies per book:
-    1. Fetch the Work JSON (for books with ol_work_key) — often has covers that
-       the search index omits.
-    2. Re-run the ISBN / title search — useful for books OL didn't have indexed
-       when the original enrichment ran.
-    """
-    try:
-        result = ol.backfill_missing_covers(db, limit=limit)
-        return result
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
 @router.get("/status")
 def ingest_status(db: Session = Depends(get_db)):
     row = db.query(

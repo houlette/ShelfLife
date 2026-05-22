@@ -1,4 +1,5 @@
 import os
+import time
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Query
@@ -8,6 +9,9 @@ from db.database import get_db
 from db.models import Book
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+
+_cache: dict = {}
+_CACHE_TTL = 3600  # 1 hour; busts automatically when book count changes
 
 
 def _build_context(books: list[Book], period: str) -> str:
@@ -74,6 +78,12 @@ def get_summary(period: str = Query("recent"), db: Session = Depends(get_db)):
     if not books:
         return {"summary": "No data yet. Import your Goodreads library to get started."}
 
+    # Cache key includes book count so the cache busts automatically after imports.
+    cache_key = (period, len(books))
+    cached = _cache.get(cache_key)
+    if cached and cached["expires_at"] > time.monotonic():
+        return cached["result"]
+
     context = _build_context(books, period)
 
     try:
@@ -85,6 +95,8 @@ def get_summary(period: str = Query("recent"), db: Session = Depends(get_db)):
             system="You are a personal reading analyst. Analyze the user's Goodreads library data and provide thoughtful insights about their reading patterns, preferences, and trends. Be specific and reference actual books and data points. Keep your response concise and engaging.",
             messages=[{"role": "user", "content": f"Analyze my reading library and share interesting patterns and insights:\n\n{context}"}],
         )
-        return {"summary": msg.content[0].text}
+        result = {"summary": msg.content[0].text}
+        _cache[cache_key] = {"result": result, "expires_at": time.monotonic() + _CACHE_TTL}
+        return result
     except Exception as e:
         return {"summary": f"Error generating insights: {e}"}
