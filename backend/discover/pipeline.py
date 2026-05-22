@@ -20,7 +20,7 @@ from ingest.openlibrary import normalize_genre
 import recommend
 from recommend import _build_profile, _score_book, _reason
 
-from . import author_expansion, subject_expansion
+from . import author_expansion, cf_author_expansion, subject_expansion
 
 
 def _normalize_title(title: str) -> str:
@@ -38,7 +38,7 @@ def _known_sets(db: Session) -> tuple[set[str], set[str]]:
 def _dedup(seeds: list[dict]) -> list[dict]:
     """Deduplicate by ol_work_key, keeping the highest-priority source
     (author > subject). Merge source_evidence when both fired."""
-    SOURCE_PRIORITY = {"author": 0, "subject": 1, "similarity": 2}
+    SOURCE_PRIORITY = {"author": 0, "cf_author": 1, "subject": 2, "similarity": 3}
     best: dict[str, dict] = {}
     for seed in seeds:
         wk = seed["ol_work_key"]
@@ -78,10 +78,11 @@ def refresh_candidates(db: Session) -> dict[str, Any]:
     known_keys, known_titles = _known_sets(db)
 
     # --- Gather candidates from all sources ---
-    from_authors = author_expansion.candidates(db, profile, known_keys, known_titles)
-    from_subjects = subject_expansion.candidates(db, profile, known_keys, known_titles)
+    from_authors    = author_expansion.candidates(db, profile, known_keys, known_titles)
+    from_cf_authors = cf_author_expansion.candidates(db, profile, known_keys, known_titles)
+    from_subjects   = subject_expansion.candidates(db, profile, known_keys, known_titles)
 
-    all_seeds = _dedup(from_authors + from_subjects)
+    all_seeds = _dedup(from_authors + from_cf_authors + from_subjects)
 
     # Filter candidates already dismissed or added
     existing: dict[str, DiscoveryCandidate] = {
