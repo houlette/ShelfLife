@@ -66,7 +66,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
   const undatedCount = filtered.length - datedCount
 
   const BUCKET = 50
-  const MAX_BUCKET = 500
+  const MAX_BUCKET = 700
   const byPageCount = useMemo(() => {
     const counts: Record<number, number> = {}
     for (const b of filtered) {
