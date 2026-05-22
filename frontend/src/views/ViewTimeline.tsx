@@ -3,7 +3,7 @@ import type { Book } from '../types'
 import { filterBooksByRange, aggregateBooks, nfmt, MONTH_NAMES } from '../utils'
 import type { Range, Granularity } from '../utils'
 import { SectionTitle, Card } from '../components'
-import { BarChart, LineChart } from '../charts'
+import { BarChart, LineChart, PubYearScatter } from '../charts'
 
 interface Props {
   books: Book[]
@@ -105,6 +105,20 @@ export function ViewTimeline({ books, range, granularity }: Props) {
           <LineChart data={pagesData} y="pages" height={200} color="var(--accent-2)" smoothWindow={3} />
         </Card>
       </div>
+
+      <Card
+        title="When were the books you read published?"
+        eyebrow="Publication age"
+        style={{ marginBottom: 48 }}
+      >
+        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.6 }}>
+          Each dot is a book: x = publication year, y = year you read it.
+          The dashed diagonal marks books read in their publication year.
+          Dot size reflects your rating; colour reflects genre.
+          Click a genre to hide it.
+        </div>
+        <PubYearScatter books={readBooks} />
+      </Card>
     </div>
   )
 }
