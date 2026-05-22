@@ -126,7 +126,7 @@ export function ViewAuthors({ books, range }: Props) {
         </div>
       )}
 
-      <DiversitySection books={readBooks} />
+      <DiversitySection books={books} readBooks={readBooks} />
 
       <div style={{ marginTop: 56 }}>
         <SectionTitle no="04" sub={`${nfmt(byAuthor.length)} authors in this period`}>
@@ -191,8 +191,9 @@ function groupEthnicity(raw: string | null): string {
 
 const POLL_MS = 3000
 
-function DiversitySection({ books }: { books: Book[] }) {
+function DiversitySection({ books, readBooks }: { books: Book[]; readBooks: Book[] }) {
   const qc = useQueryClient()
+  const [scope, setScope] = useState<'read' | 'all'>('read')
   const [enriching, setEnriching] = useState(false)
   const [progress, setProgress] = useState<{
     authors_processed: number; authors_enriched: number; books_updated: number; errors: number
@@ -200,17 +201,19 @@ function DiversitySection({ books }: { books: Book[] }) {
   const [done, setDone] = useState(false)
   const [enrichError, setEnrichError] = useState<string | null>(null)
 
-  // Compute per-author demographics from all read books
+  const scopedBooks = scope === 'read' ? readBooks : books
+
+  // Compute per-author demographics from scoped books
   const authorDemographics = useMemo(() => {
     const map: Record<string, { gender: string | null; ethnicity: string | null }> = {}
-    for (const b of books) {
+    for (const b of scopedBooks) {
       if (!b.author) continue
       if (!map[b.author]) map[b.author] = { gender: null, ethnicity: null }
       if (!map[b.author].gender && b.author_gender) map[b.author].gender = b.author_gender
       if (!map[b.author].ethnicity && b.author_ethnicity) map[b.author].ethnicity = b.author_ethnicity
     }
     return map
-  }, [books])
+  }, [scopedBooks])
 
   const totalAuthors = Object.keys(authorDemographics).length
   const enrichedAuthors = Object.values(authorDemographics).filter(d => d.gender != null).length
@@ -238,10 +241,10 @@ function DiversitySection({ books }: { books: Book[] }) {
       .map(e => ({ label: e, value: counts[e] ?? 0, color: ETHNICITY_COLORS[e] }))
   }, [authorDemographics])
 
-  // Per-author average of rated books (my_rating > 0)
+  // Per-author average of rated books (my_rating > 0) — always from read books only
   const authorRatingMap = useMemo(() => {
     const byAuthor: Record<string, number[]> = {}
-    for (const b of books) {
+    for (const b of readBooks) {
       if (!b.author || b.my_rating <= 0) continue
       ;(byAuthor[b.author] ??= []).push(b.my_rating)
     }
@@ -249,7 +252,7 @@ function DiversitySection({ books }: { books: Book[] }) {
     for (const [a, ratings] of Object.entries(byAuthor))
       out[a] = ratings.reduce((s, r) => s + r, 0) / ratings.length
     return out
-  }, [books])
+  }, [readBooks])
 
   // Average per-author rating grouped by gender (min 3 rated authors per group)
   const ratingByGender = useMemo(() => {
@@ -337,12 +340,18 @@ function DiversitySection({ books }: { books: Book[] }) {
 
   return (
     <div>
-      <SectionTitle
-        no={sectionNo}
-        sub={`${nfmt(enrichedAuthors)} of ${nfmt(totalAuthors)} unique authors enriched`}
-      >
-        Diversity
-      </SectionTitle>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+        <SectionTitle
+          no={sectionNo}
+          sub={`${nfmt(enrichedAuthors)} of ${nfmt(totalAuthors)} unique authors enriched`}
+        >
+          Diversity
+        </SectionTitle>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
+          <Pill active={scope === 'read'} onClick={() => setScope('read')}>Books read</Pill>
+          <Pill active={scope === 'all'} onClick={() => setScope('all')}>All books</Pill>
+        </div>
+      </div>
 
       {/* Enrich controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: progress ? 16 : 32, flexWrap: 'wrap' }}>
@@ -423,7 +432,7 @@ function DiversitySection({ books }: { books: Book[] }) {
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-            <Card title="Gender" eyebrow={`${nfmt(enrichedAuthors)} authors · all-time reads`} style={{ minWidth: 0 }}>
+            <Card title="Gender" eyebrow={`${nfmt(enrichedAuthors)} authors · ${scope === 'read' ? 'books read' : 'all books'}`} style={{ minWidth: 0 }}>
               <HBar
                 items={genderBreakdown}
                 format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
