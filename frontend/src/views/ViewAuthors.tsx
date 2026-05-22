@@ -141,29 +141,40 @@ const GENDER_COLORS: Record<string, string> = {
 }
 
 const ETHNICITY_COLORS: Record<string, string> = {
-  'White / European':  '#7ab8d6',
   'Black / African':   '#d6904e',
   'Asian':             '#d4c94a',
   'Hispanic / Latino': '#6ac86a',
   'Middle Eastern':    '#d65b5b',
+  'Jewish':            '#c8a44a',
   'Indigenous':        '#a07ad6',
+  'White / European':  '#7ab8d6',
   'Other':             '#8ab0b8',
   'Unknown':           'var(--line-soft)',
 }
 
 const ETHNICITY_ORDER = [
-  'White / European', 'Black / African', 'Asian',
-  'Hispanic / Latino', 'Middle Eastern', 'Indigenous', 'Other', 'Unknown',
+  'Black / African', 'Asian', 'Hispanic / Latino',
+  'Middle Eastern', 'Jewish', 'Indigenous', 'White / European', 'Other', 'Unknown',
 ]
 
 function groupEthnicity(raw: string | null): string {
   if (!raw) return 'Unknown'
   const l = raw.toLowerCase()
+  // Exact match on stored group names first (fast path for enriched data)
+  if (l === 'jewish') return 'Jewish'
+  if (l === 'black / african') return 'Black / African'
+  if (l === 'asian') return 'Asian'
+  if (l === 'hispanic / latino') return 'Hispanic / Latino'
+  if (l === 'middle eastern') return 'Middle Eastern'
+  if (l === 'indigenous') return 'Indigenous'
+  if (l === 'white / european') return 'White / European'
+  // Regex fallback for legacy or partial strings
+  if (/jewish/.test(l)) return 'Jewish'
   if (/white|european|british|english|irish|french|german|italian|polish|dutch|scandinavian|swedish|norwegian|danish|finnish|greek|spanish|portuguese|australian/.test(l)) return 'White / European'
   if (/black|african american|african|nigerian|ghanaian|kenyan|ugandan|jamaican|haitian|caribbean|cameroonian|senegalese|zimbabwean/.test(l)) return 'Black / African'
   if (/asian|chinese|japanese|korean|indian|south asian|pakistani|bangladeshi|vietnamese|thai|filipino|east asian|southeast asian|bengali|tamil/.test(l)) return 'Asian'
   if (/hispanic|latino|latina|mexican|cuban|puerto rican|colombian|argentinian|venezuelan|peruvian|chilean|brazilian|ecuadorian/.test(l)) return 'Hispanic / Latino'
-  if (/arab|arabic|middle east|iranian|turkish|lebanese|jewish|israeli|moroccan|egyptian|persian|afghan|kurdish/.test(l)) return 'Middle Eastern'
+  if (/arab|arabic|middle east|iranian|turkish|lebanese|israeli|moroccan|egyptian|persian|afghan|kurdish/.test(l)) return 'Middle Eastern'
   if (/native american|indigenous|first nations|aboriginal|cherokee|navajo|lakota|māori|inuit|ojibwe/.test(l)) return 'Indigenous'
   return 'Other'
 }
@@ -217,24 +228,45 @@ function DiversitySection({ books }: { books: Book[] }) {
       .map(e => ({ label: e, value: counts[e] ?? 0, color: ETHNICITY_COLORS[e] }))
   }, [authorDemographics])
 
+  async function runEnrichmentPoll() {
+    // Fire-and-forget POST — returns immediately, enrichment runs in background
+    await api.diversityEnrich()
+    // Poll until done
+    while (true) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      const status = await api.diversityStatus()
+      setProgress(status.task)
+      qc.invalidateQueries({ queryKey: ['books'] })
+      if (!status.task.running) break
+    }
+  }
+
   async function handleEnrich() {
     setEnriching(true)
     setDone(false)
     setProgress(null)
     setEnrichError(null)
-
     try {
-      // Fire-and-forget POST — returns immediately, enrichment runs in background
-      await api.diversityEnrich()
+      await runEnrichmentPoll()
+    } catch (e) {
+      setEnrichError(String(e))
+    } finally {
+      setEnriching(false)
+      setDone(true)
+    }
+  }
 
-      // Poll the status endpoint until the background task finishes
-      while (true) {
-        await new Promise(r => setTimeout(r, POLL_MS))
-        const status = await api.diversityStatus()
-        setProgress(status.task)
-        qc.invalidateQueries({ queryKey: ['books'] })
-        if (!status.task.running) break
-      }
+  async function handleReclassify() {
+    // Reset authors tagged Middle Eastern (Jewish fix) + those with no origin
+    // found (enables the new P27 nationality fallback), then re-enrich.
+    setEnriching(true)
+    setDone(false)
+    setProgress(null)
+    setEnrichError(null)
+    try {
+      await api.diversityReset('middle_eastern')
+      await api.diversityReset('unresolved')
+      await runEnrichmentPoll()
     } catch (e) {
       setEnrichError(String(e))
     } finally {
@@ -253,24 +285,37 @@ function DiversitySection({ books }: { books: Book[] }) {
     <div>
       <SectionTitle
         no={sectionNo}
-        sub={`${nfmt(enrichedAuthors)} of ${nfmt(totalAuthors)} unique authors enriched via Wikidata`}
+        sub={`${nfmt(enrichedAuthors)} of ${nfmt(totalAuthors)} unique authors enriched`}
       >
         Diversity
       </SectionTitle>
 
       {/* Enrich controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: progress ? 16 : 32 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: progress ? 16 : 32, flexWrap: 'wrap' }}>
         {!enriching ? (
-          <button
-            onClick={handleEnrich}
-            style={{
-              padding: '8px 16px', fontSize: 12, cursor: 'pointer',
-              background: 'var(--paper)', border: '1px solid var(--line)',
-              borderRadius: 2, color: 'var(--ink)', fontFamily: 'inherit',
-            }}
-          >
-            Enrich from Wikidata
-          </button>
+          <>
+            <button
+              onClick={handleEnrich}
+              style={{
+                padding: '8px 16px', fontSize: 12, cursor: 'pointer',
+                background: 'var(--paper)', border: '1px solid var(--line)',
+                borderRadius: 2, color: 'var(--ink)', fontFamily: 'inherit',
+              }}
+            >
+              Enrich new authors
+            </button>
+            <button
+              onClick={handleReclassify}
+              style={{
+                padding: '8px 16px', fontSize: 12, cursor: 'pointer',
+                background: 'var(--paper)', border: '1px solid var(--line)',
+                borderRadius: 2, color: 'var(--muted)', fontFamily: 'inherit',
+              }}
+              title="Resets Middle Eastern authors (Jewish fix) and previously-unresolved authors (P27 fallback), then re-enriches"
+            >
+              Re-classify existing
+            </button>
+          </>
         ) : (
           <button
             onClick={handleStop}
@@ -285,7 +330,7 @@ function DiversitySection({ books }: { books: Book[] }) {
         )}
         <div style={{ fontSize: 12, color: 'var(--muted)' }}>
           {enriching
-            ? `Searching Wikidata… ${nfmt(totalAuthors - enrichedAuthors)} authors remaining`
+            ? `Searching… ${nfmt(totalAuthors - enrichedAuthors)} authors remaining`
             : `${nfmt(totalAuthors - enrichedAuthors)} authors not yet searched`}
         </div>
       </div>
@@ -329,7 +374,7 @@ function DiversitySection({ books }: { books: Book[] }) {
               format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
             />
           </Card>
-          <Card title="Ethnicity / Race" eyebrow="Broad categories from Wikidata labels" style={{ minWidth: 0 }}>
+          <Card title="Geographic / Cultural Origin" eyebrow="Wikipedia categories · Wikidata P27 nationality" style={{ minWidth: 0 }}>
             <HBar
               items={ethnicityBreakdown}
               format={v => `${v} (${totalAuthors ? Math.round(v / totalAuthors * 100) : 0}%)`}
@@ -339,9 +384,11 @@ function DiversitySection({ books }: { books: Book[] }) {
       )}
 
       <div style={{ marginTop: 16, fontSize: 11, color: 'var(--muted-2)', lineHeight: 1.6 }}>
-        Demographics sourced from Wikidata (P21 sex/gender, P172 ethnic group). Ethnicity labels are
-        grouped into broad categories; accuracy depends on Wikidata coverage. "Unknown" includes
-        authors not yet searched or not found on Wikidata.
+        Gender from Wikidata P21; origin from Wikipedia article categories with Wikidata P27
+        nationality as fallback for authors outside the US/UK/Western Europe. "Unknown" is
+        predominantly white American and British authors — Wikipedia treats this as the unmarked
+        default and does not categorise it. Click "Re-classify existing" after updating to apply
+        the Jewish bucket fix and P27 fallback to already-searched authors.
       </div>
     </div>
   )
