@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text
+from sqlalchemy import Boolean, Column, Integer, Float, String, Date, DateTime, Text
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -49,6 +49,7 @@ class Book(Base):
     author_gender = Column(String(20))    # "Man" | "Woman" | "Non-binary" | "Other"
     author_ethnicity = Column(String(100))  # raw Wikidata label (e.g. "African Americans")
     diversity_enriched_at = Column(DateTime)  # when Wikidata was last queried for this author
+    author_diversity_manual = Column(Boolean, default=False)  # True = user-edited, skip re-enrichment
 
 
 class ExternalRating(Base):
