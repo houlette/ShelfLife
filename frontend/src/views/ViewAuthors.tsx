@@ -470,7 +470,7 @@ function DiversitySection({ books }: { books: Book[] }) {
 // Author list
 // ---------------------------------------------------------------------------
 
-type ListSortKey = 'name' | 'books' | 'rating' | 'pages'
+type ListSortKey = 'name' | 'books' | 'rating' | 'pages' | 'years'
 
 interface AuthorEntry {
   author: string; count: number; avgRating: number | null; avgOl: number | null
@@ -493,7 +493,11 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
     const topGenre = Object.entries(genreCounts).sort((x, y) => y[1] - x[1])[0]?.[0] ?? null
     const gender = a.books.find(b => b.author_gender)?.author_gender ?? null
     const origin = groupEthnicity(a.books.find(b => b.author_ethnicity)?.author_ethnicity ?? null)
-    return { ...a, topGenre, gender, origin: origin === 'Unknown' ? null : origin }
+    const pubYears = a.books.map(b => b.original_pub_year ?? b.year_published).filter((y): y is number => y != null)
+    const minYear = pubYears.length ? Math.min(...pubYears) : null
+    const maxYear = pubYears.length ? Math.max(...pubYears) : null
+    const yearsActive = minYear == null ? null : minYear === maxYear ? String(minYear) : `${minYear}–${maxYear}`
+    return { ...a, topGenre, gender, origin: origin === 'Unknown' ? null : origin, yearsActive, minYear }
   }), [authors])
 
   const filtered = useMemo(() => {
@@ -511,6 +515,7 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
         case 'books':  return dir * (a.count - b.count)
         case 'rating': return dir * ((a.avgRating ?? -1) - (b.avgRating ?? -1))
         case 'pages':  return dir * (a.totalPages - b.totalPages)
+        case 'years':  return dir * ((a.minYear ?? 0) - (b.minYear ?? 0))
       }
     })
     return arr
@@ -538,7 +543,7 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
     </button>
   )
 
-  const COLS = '1fr 54px 110px 72px 120px 72px 120px'
+  const COLS = '1fr 54px 110px 72px 120px 72px 120px 90px'
 
   return (
     <div>
@@ -568,6 +573,7 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
         <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Genre</span>
         <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Gender</span>
         <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Origin</span>
+        {colHead('Active', 'years', { textAlign: 'right' })}
       </div>
 
       {/* Rows */}
@@ -596,6 +602,9 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.gender ?? '—'}</div>
           <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {a.origin ?? '—'}
+          </div>
+          <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+            {a.yearsActive ?? '—'}
           </div>
         </div>
       ))}
