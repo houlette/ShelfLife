@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { Book } from '../types'
 import { nfmt, effectiveDate, goodreadsUrl } from '../utils'
 import { SectionTitle, Pill, BookCover } from '../components'
@@ -6,13 +6,20 @@ import { RatingStars } from '../components/RatingStars'
 
 interface Props {
   books: Book[]
+  initialSearch?: string
+  onSearchClear?: () => void
 }
 
 type SortKey = 'title' | 'author' | 'rating' | 'pages' | 'date' | 'year'
 type SortDir = 'asc' | 'desc'
 
-export function ViewBooks({ books }: Props) {
-  const [search, setSearch] = useState('')
+export function ViewBooks({ books, initialSearch, onSearchClear }: Props) {
+  const [search, setSearch] = useState(initialSearch ?? '')
+
+  // Sync when navigating here from another tab with a pre-set filter
+  useEffect(() => {
+    if (initialSearch != null) setSearch(initialSearch)
+  }, [initialSearch])
   const [shelf, setShelf] = useState<string | null>(null)
   const [genre, setGenre] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -94,7 +101,7 @@ export function ViewBooks({ books }: Props) {
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <input
           value={search}
-          onChange={e => { setSearch(e.target.value); setPage(0) }}
+          onChange={e => { setSearch(e.target.value); setPage(0); if (e.target.value === '') onSearchClear?.() }}
           placeholder="Search title or author…"
           style={{
             padding: '8px 12px', fontSize: 13, border: '1px solid var(--line)',

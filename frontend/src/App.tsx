@@ -201,6 +201,7 @@ function AppShell() {
   const [range,       setRange]       = useState<Range>('all')
   const [granularity, setGranularity] = useState<Granularity>('year')
   const [theme,       setTheme]       = useState<Theme>('paper')
+  const [bookSearch,  setBookSearch]  = useState('')
 
   useEffect(() => { window.scrollTo(0, 0) }, [view])
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme) }, [theme])
@@ -236,10 +237,10 @@ function AppShell() {
         {view === 'overview'  && <ViewOverview  books={books} range={range} granularity={granularity} />}
         {view === 'timeline'  && <ViewTimeline  books={books} range={range} granularity={granularity} />}
         {view === 'shelves'   && <ViewShelves   books={books} />}
-        {view === 'authors'   && <ViewAuthors   books={books} range={range} />}
+        {view === 'authors'   && <ViewAuthors   books={books} range={range} onAuthorClick={name => { setBookSearch(name); setView('books') }} />}
         {view === 'genres'    && <ViewGenres    books={books} range={range} />}
         {view === 'ratings'   && <ViewRatings   books={books} range={range} granularity={granularity} />}
-        {view === 'books'     && <ViewBooks     books={books} />}
+        {view === 'books'     && <ViewBooks     books={books} initialSearch={bookSearch} onSearchClear={() => setBookSearch('')} />}
         {view === 'recommend' && <ViewRecommend />}
         {view === 'discover'  && <ViewDiscover />}
         {view === 'insights'  && <ViewInsights />}

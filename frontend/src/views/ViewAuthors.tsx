@@ -11,9 +11,10 @@ import { useQueryClient } from '@tanstack/react-query'
 interface Props {
   books: Book[]
   range: Range
+  onAuthorClick?: (author: string) => void
 }
 
-export function ViewAuthors({ books, range }: Props) {
+export function ViewAuthors({ books, range, onAuthorClick }: Props) {
   const readBooks = useMemo(() => books.filter(b => b.exclusive_shelf === 'read'), [books])
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
 
@@ -129,7 +130,7 @@ export function ViewAuthors({ books, range }: Props) {
         <SectionTitle no="04" sub={`${nfmt(byAuthor.length)} authors in this period`}>
           All authors
         </SectionTitle>
-        <AuthorList authors={byAuthor} />
+        <AuthorList authors={byAuthor} onAuthorClick={onAuthorClick} />
       </div>
     </div>
   )
@@ -477,7 +478,7 @@ interface AuthorEntry {
   diff: number | null; ratedCount: number; totalPages: number; books: Book[]
 }
 
-function AuthorList({ authors }: { authors: AuthorEntry[] }) {
+function AuthorList({ authors, onAuthorClick }: { authors: AuthorEntry[]; onAuthorClick?: (author: string) => void }) {
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<ListSortKey>('books')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -583,8 +584,21 @@ function AuthorList({ authors }: { authors: AuthorEntry[] }) {
           gap: 12, padding: '9px 0', borderBottom: '1px solid var(--line-soft)',
           alignItems: 'center',
         }}>
-          <div style={{ fontSize: 13, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {a.author}
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {onAuthorClick
+              ? (
+                <button onClick={() => onAuthorClick(a.author)} style={{
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 13, color: 'var(--accent)',
+                  textDecoration: 'none', textAlign: 'left',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  maxWidth: '100%',
+                }}>
+                  {a.author}
+                </button>
+              )
+              : <span style={{ fontSize: 13, color: 'var(--ink)' }}>{a.author}</span>
+            }
           </div>
           <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{a.count}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
