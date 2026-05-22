@@ -32,6 +32,8 @@ export function ViewOverview({ books, range, granularity }: Props) {
   }, [rated])
 
   const booksPerYear = useMemo(() => aggregateBooks(readBooks, 'year'), [readBooks])
+  const datedCount = useMemo(() => filtered.filter(b => b.date_read).length, [filtered])
+  const undatedCount = filtered.length - datedCount
 
   return (
     <div>
@@ -41,7 +43,7 @@ export function ViewOverview({ books, range, granularity }: Props) {
 
       {/* Hero stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 48 }}>
-        <Stat label="Books read" value={nfmt(filtered.length)} size="lg" />
+        <Stat label="Books read" value={nfmt(filtered.length)} size="lg" sub={undatedCount > 0 ? `${nfmt(undatedCount)} without read date` : undefined} />
         <Stat label="Pages" value={nfmt(totalPages)} size="lg" />
         <Stat label="Authors" value={nfmt(uniqueAuthors)} size="lg" />
         <Stat label="Avg rating" value={avgRating != null ? avgRating.toFixed(1) : null} unit="/5" size="lg" />
