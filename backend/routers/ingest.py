@@ -254,7 +254,7 @@ def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_
     else:
         raise HTTPException(400, f"Unknown scope: {scope!r}")
 
-    count = q.update({Book.diversity_enriched_at: None}, synchronize_session=False)
+    count = q.update({"diversity_enriched_at": None}, synchronize_session=False)
     db.commit()
     return {"reset": count}
 
