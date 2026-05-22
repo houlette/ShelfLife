@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Book } from '../types'
 import { nfmt, filterBooksByRange } from '../utils'
 import type { Range } from '../utils'
-import { SectionTitle, Stat, Card } from '../components'
+import { SectionTitle, Stat, Card, Pill } from '../components'
 import { RatingStars } from '../components/RatingStars'
 import { HBar } from '../charts'
 import { api } from '../api'
@@ -124,6 +124,13 @@ export function ViewAuthors({ books, range }: Props) {
       )}
 
       <DiversitySection books={readBooks} />
+
+      <div style={{ marginTop: 56 }}>
+        <SectionTitle no="04" sub={`${nfmt(byAuthor.length)} authors in this period`}>
+          All authors
+        </SectionTitle>
+        <AuthorList authors={byAuthor} />
+      </div>
     </div>
   )
 }
@@ -455,6 +462,158 @@ function DiversitySection({ books }: { books: Book[] }) {
         default and does not categorise it. Click "Re-classify existing" after updating to apply
         the Jewish bucket fix and P27 fallback to already-searched authors.
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Author list
+// ---------------------------------------------------------------------------
+
+type ListSortKey = 'name' | 'books' | 'rating' | 'pages'
+
+interface AuthorEntry {
+  author: string; count: number; avgRating: number | null; avgOl: number | null
+  diff: number | null; ratedCount: number; totalPages: number; books: Book[]
+}
+
+function AuthorList({ authors }: { authors: AuthorEntry[] }) {
+  const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState<ListSortKey>('books')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [page, setPage] = useState(0)
+  const PER_PAGE = 50
+
+  // Augment each row with top genre + diversity fields derived from books array
+  const rows = useMemo(() => authors.map(a => {
+    const genreCounts: Record<string, number> = {}
+    for (const b of a.books)
+      if (b.genre && b.genre !== 'Unclassified')
+        genreCounts[b.genre] = (genreCounts[b.genre] ?? 0) + 1
+    const topGenre = Object.entries(genreCounts).sort((x, y) => y[1] - x[1])[0]?.[0] ?? null
+    const gender = a.books.find(b => b.author_gender)?.author_gender ?? null
+    const origin = groupEthnicity(a.books.find(b => b.author_ethnicity)?.author_ethnicity ?? null)
+    return { ...a, topGenre, gender, origin: origin === 'Unknown' ? null : origin }
+  }), [authors])
+
+  const filtered = useMemo(() => {
+    if (!search) return rows
+    const q = search.toLowerCase()
+    return rows.filter(a => a.author.toLowerCase().includes(q))
+  }, [rows, search])
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered]
+    const dir = sortDir === 'asc' ? 1 : -1
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case 'name':   return dir * a.author.localeCompare(b.author)
+        case 'books':  return dir * (a.count - b.count)
+        case 'rating': return dir * ((a.avgRating ?? -1) - (b.avgRating ?? -1))
+        case 'pages':  return dir * (a.totalPages - b.totalPages)
+      }
+    })
+    return arr
+  }, [filtered, sortKey, sortDir])
+
+  const paged = sorted.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
+  const totalPages = Math.ceil(sorted.length / PER_PAGE)
+
+  function toggleSort(key: ListSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('desc') }
+    setPage(0)
+  }
+
+  const colHead = (label: string, key: ListSortKey, style?: React.CSSProperties) => (
+    <button onClick={() => toggleSort(key)} style={{
+      background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+      fontSize: 10.5, textTransform: 'uppercase' as const, letterSpacing: '0.1em',
+      color: sortKey === key ? 'var(--ink)' : 'var(--muted)',
+      fontWeight: sortKey === key ? 600 : 400,
+      padding: 0, textAlign: (style?.textAlign ?? 'left') as React.CSSProperties['textAlign'],
+      ...style,
+    }}>
+      {label}{sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+    </button>
+  )
+
+  const COLS = '1fr 54px 110px 72px 120px 72px 120px'
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <input
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(0) }}
+          placeholder="Search author…"
+          style={{
+            padding: '8px 12px', fontSize: 13, border: '1px solid var(--line)',
+            borderRadius: 2, background: 'var(--paper)', color: 'var(--ink)',
+            width: 260, fontFamily: 'inherit', outline: 'none',
+          }}
+        />
+      </div>
+
+      {/* Header */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: COLS,
+        gap: 12, padding: '8px 0', borderBottom: '2px solid var(--line)',
+        alignItems: 'end',
+      }}>
+        {colHead('Author', 'name')}
+        {colHead('Books', 'books', { textAlign: 'right' })}
+        {colHead('Avg rating', 'rating')}
+        {colHead('Pages', 'pages', { textAlign: 'right' })}
+        <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Genre</span>
+        <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Gender</span>
+        <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Origin</span>
+      </div>
+
+      {/* Rows */}
+      {paged.map(a => (
+        <div key={a.author} style={{
+          display: 'grid', gridTemplateColumns: COLS,
+          gap: 12, padding: '9px 0', borderBottom: '1px solid var(--line-soft)',
+          alignItems: 'center',
+        }}>
+          <div style={{ fontSize: 13, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {a.author}
+          </div>
+          <div className="num" style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{a.count}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {a.avgRating != null
+              ? <><RatingStars rating={Math.round(a.avgRating)} size={10} /><span className="num" style={{ fontSize: 11, color: 'var(--muted)' }}>{a.avgRating.toFixed(2)}</span></>
+              : <span style={{ fontSize: 11, color: 'var(--muted)' }}>—</span>
+            }
+          </div>
+          <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+            {a.totalPages ? nfmt(a.totalPages) : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {a.topGenre ?? '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{a.gender ?? '—'}</div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {a.origin ?? '—'}
+          </div>
+        </div>
+      ))}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 24 }}>
+          <Pill onClick={() => setPage(p => Math.max(0, p - 1))} style={{ visibility: page > 0 ? 'visible' : 'hidden' }}>
+            ← Prev
+          </Pill>
+          <span className="mono" style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 12px' }}>
+            {page + 1} / {totalPages}
+          </span>
+          <Pill onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} style={{ visibility: page < totalPages - 1 ? 'visible' : 'hidden' }}>
+            Next →
+          </Pill>
+        </div>
+      )}
     </div>
   )
 }
