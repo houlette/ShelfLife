@@ -356,3 +356,57 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
         "not_found": not_found,
         "errors": errors[:10],
     }
+
+
+_SERIES_FIELDS = "key,title,author_name,cover_i,first_publish_year"
+
+
+def fetch_series_catalog(series_name: str, author: str | None) -> list[dict[str, Any]]:
+    """Query Open Library for all known books in a series.
+
+    Uses OL's series search field.  Results are filtered to entries where our
+    regex can extract a matching series name and a numeric position so the
+    caller doesn't have to handle unparseable titles.
+
+    Returns a list of dicts sorted by position:
+        {"position", "title", "author", "ol_work_key", "cover_url"}
+    """
+    from ingest.series import parse_series, SERIES_RE
+
+    try:
+        r = requests.get(
+            OL_SEARCH,
+            params={"q": f'series:"{series_name}"', "fields": _SERIES_FIELDS, "limit": 50},
+            timeout=10,
+        )
+        r.raise_for_status()
+        docs = r.json().get("docs", [])
+    except Exception:
+        return []
+
+    series_key = series_name.lower()
+    results = []
+    for doc in docs:
+        title = doc.get("title", "")
+        name, pos = parse_series(title)
+        if pos is None:
+            continue
+        if name and name.lower() != series_key:
+            continue  # OL returned a different series
+        cover_i = doc.get("cover_i")
+        results.append({
+            "position": pos,
+            "title": title,
+            "author": (doc.get("author_name") or [None])[0],
+            "ol_work_key": doc.get("key"),
+            "cover_url": f"{COVER_BASE}/{cover_i}-M.jpg" if cover_i else None,
+        })
+
+    # Deduplicate by position — keep the first occurrence (OL may return duplicates)
+    seen: set[int] = set()
+    unique = []
+    for r in sorted(results, key=lambda x: x["position"]):
+        if r["position"] not in seen:
+            seen.add(r["position"])
+            unique.append(r)
+    return unique

@@ -1,7 +1,7 @@
 from pathlib import Path
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
-from .models import Base
+from .models import Base, Book
 
 DB_PATH = Path(__file__).parent.parent.parent / "data" / "shelflife.db"
 DB_PATH.parent.mkdir(exist_ok=True)
@@ -41,6 +41,8 @@ _MIGRATIONS = [
     ("books", "author_ethnicity VARCHAR(100)"),
     ("books", "diversity_enriched_at DATETIME"),
     ("books", "author_diversity_manual BOOLEAN DEFAULT FALSE"),
+    ("books", "series_name VARCHAR(255)"),
+    ("books", "series_position INTEGER"),
 ]
 
 _INDEXES = [
@@ -60,6 +62,25 @@ def _run_migrations():
                 pass
 
 
+def _backfill_series() -> None:
+    """Parse series name + position from book titles for any books not yet tagged."""
+    from ingest.series import parse_series
+    db = SessionLocal()
+    try:
+        books = db.query(Book).filter(
+            Book.series_name.is_(None),
+            Book.title.like('%(%'),
+        ).all()
+        for b in books:
+            name, pos = parse_series(b.title)
+            if name:
+                b.series_name = name
+                b.series_position = pos
+        db.commit()
+    finally:
+        db.close()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     _run_migrations()
@@ -70,6 +91,7 @@ def init_db():
                 conn.commit()
             except Exception:
                 pass
+    _backfill_series()
 
 
 def get_db():

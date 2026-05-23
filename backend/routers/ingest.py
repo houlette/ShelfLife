@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from db.database import get_db
-from db.models import Book, BooklistPending, IngestLog
+from db.models import Book, BooklistPending, IngestLog, SeriesCatalog
 import ingest.goodreads as goodreads_ingest
 import ingest.booklist as booklist_ingest
 import ingest.openlibrary as ol
@@ -417,6 +417,112 @@ def diversity_enrich_status(db: Session = Depends(get_db)):
         "with_ethnicity":    with_ethnicity,
         "task":              task,
     }
+
+
+# ---------------------------------------------------------------------------
+# Series enrichment background task
+# ---------------------------------------------------------------------------
+
+_series_lock  = threading.Lock()
+_series_state: dict = {
+    "running":   False,
+    "processed": 0,
+    "total":     0,
+    "current":   None,
+}
+
+
+def _run_series_enrich_bg() -> None:
+    from datetime import timedelta
+    from sqlalchemy import distinct
+    from db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        # Distinct series names from owned books, with their most common author
+        rows = (
+            db.query(Book.series_name, Book.author)
+            .filter(Book.series_name.isnot(None))
+            .all()
+        )
+        # Build (series_name -> author) map — first author encountered per series
+        seen: dict[str, str | None] = {}
+        for name, author in rows:
+            if name and name not in seen:
+                seen[name] = author
+
+        stale_cutoff = datetime.utcnow() - timedelta(days=7)
+
+        with _series_lock:
+            _series_state.update({"running": True, "total": len(seen), "processed": 0, "current": None})
+
+        for series_name, author in seen.items():
+            # Check if already fetched recently
+            existing = (
+                db.query(SeriesCatalog)
+                .filter(SeriesCatalog.series_key == series_name.lower())
+                .first()
+            )
+            if existing and existing.fetched_at and existing.fetched_at > stale_cutoff:
+                with _series_lock:
+                    _series_state["processed"] += 1
+                continue
+
+            with _series_lock:
+                _series_state["current"] = series_name
+
+            entries = ol.fetch_series_catalog(series_name, author)
+            now = datetime.utcnow()
+
+            if entries:
+                # Delete old catalog rows for this series, insert fresh
+                db.query(SeriesCatalog).filter(
+                    SeriesCatalog.series_key == series_name.lower()
+                ).delete()
+                for e in entries:
+                    db.add(SeriesCatalog(
+                        series_key=series_name.lower(),
+                        display_name=series_name,
+                        position=e["position"],
+                        title=e["title"],
+                        author=e["author"],
+                        ol_work_key=e["ol_work_key"],
+                        cover_url=e["cover_url"],
+                        fetched_at=now,
+                    ))
+                db.commit()
+
+            with _series_lock:
+                _series_state["processed"] += 1
+
+            import time as _time
+            _time.sleep(0.2)  # ~5 req/sec
+
+        with _series_lock:
+            _series_state.update({"running": False, "current": None})
+    except Exception:
+        with _series_lock:
+            _series_state["running"] = False
+    finally:
+        db.close()
+
+
+@router.post("/enrich-series")
+def enrich_series():
+    """Start a background task that fetches the complete book list for each series
+    from Open Library and caches it in series_catalog."""
+    with _series_lock:
+        if _series_state["running"]:
+            return {"status": "already_running"}
+        _series_state["running"] = True
+    threading.Thread(target=_run_series_enrich_bg, daemon=True).start()
+    return {"status": "started"}
+
+
+@router.get("/series-enrich/status")
+def series_enrich_status():
+    with _series_lock:
+        return dict(_series_state)
 
 
 @router.post("/reclassify")

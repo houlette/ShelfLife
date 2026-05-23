@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from db.models import Book
+from ingest.series import SERIES_RE, parse_series as _parse_series_shared
 
 # Score is a predicted 1-5 rating. Base is your genre baseline, then nudged by
 # author offset, OL-z bonus, subject-affinity offset, and penalties.
@@ -31,16 +32,12 @@ GLOBAL_MEAN = 3.5      # neutral baseline when we have no genre data
 SUBJECT_MIN_SUPPORT = 5  # subject must appear in N+ rated books to count
 SUBJECT_MIN_OVERLAP = 3  # candidate must share N+ trustworthy subjects
 
-# Match Goodreads-style series suffixes: "Title (Series Name, #N)" or "(Series, Book N)"
-SERIES_RE = re.compile(r"\(([^()]+?),\s*(?:#|book\s*)(\d+)\)", re.IGNORECASE)
-
-
 def _series_info(title: str) -> tuple[str | None, int | None]:
-    """Extract (series_name, book_number) from a title, or (None, None)."""
-    m = SERIES_RE.search(title)
-    if not m:
+    """Extract (series_name_lower, book_number) from a title, or (None, None)."""
+    name, pos = _parse_series_shared(title)
+    if name is None:
         return None, None
-    return m.group(1).strip().lower(), int(m.group(2))
+    return name.lower(), pos
 
 
 def _build_profile(db: Session, min_data: int = 3, read: list[Book] | None = None) -> dict[str, Any]:

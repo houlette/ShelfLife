@@ -51,6 +51,10 @@ class Book(Base):
     diversity_enriched_at = Column(DateTime)  # when Wikidata was last queried for this author
     author_diversity_manual = Column(Boolean, default=False)  # True = user-edited, skip re-enrichment
 
+    # Parsed from Goodreads title suffix, e.g. "Name of the Wind (Kingkiller Chronicle, #1)"
+    series_name     = Column(String(255))
+    series_position = Column(Integer)
+
 
 class ExternalRating(Base):
     """Ratings sourced from public datasets (Goodbooks-10k, etc.) used for
@@ -137,6 +141,21 @@ class BooklistPending(Base):
     candidate_book_ids = Column(Text)  # JSON list of Book.id to compare against
     status = Column(String(20), default="pending")  # "pending" (others reserved)
     created_at = Column(DateTime)
+
+
+class SeriesCatalog(Base):
+    """Complete book list per series, fetched from Open Library and cached."""
+    __tablename__ = "series_catalog"
+
+    id           = Column(Integer, primary_key=True)
+    series_key   = Column(String(255), nullable=False, index=True)  # lowercased name
+    display_name = Column(String(255))   # original-case name
+    position     = Column(Integer)
+    title        = Column(Text)
+    author       = Column(String(255))
+    ol_work_key  = Column(String(50))
+    cover_url    = Column(Text)
+    fetched_at   = Column(DateTime)      # same timestamp for all rows in a series
 
 
 class IngestLog(Base):

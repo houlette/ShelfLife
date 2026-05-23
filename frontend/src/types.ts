@@ -28,6 +28,25 @@ export interface Book {
   author_gender: string | null
   author_ethnicity: string | null
   author_diversity_manual?: boolean
+  series_name?: string | null
+  series_position?: number | null
+}
+
+export interface SeriesEntry {
+  position: number
+  title: string | null
+  shelf: string | null
+  cover_url: string | null
+  book_id: number | null
+  owned: boolean
+}
+
+export interface SeriesStat {
+  name: string
+  key: string
+  author: string | null
+  catalog_fetched: boolean
+  entries: SeriesEntry[]
 }
 
 export interface GenreStat {
