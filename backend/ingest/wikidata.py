@@ -45,6 +45,7 @@ from db.models import Book
 
 _WD = "https://www.wikidata.org/w/api.php"
 _WP = "https://en.wikipedia.org/w/api.php"
+_WD_SPARQL = "https://query.wikidata.org/sparql"
 
 # Wikimedia API rules (https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits):
 #   • Unauthenticated clients with a compliant User-Agent: 200 req/min
@@ -567,3 +568,141 @@ def enrich_all(
         "books_updated":     books_updated,
         "errors":            errors,
     }
+
+
+# ---------------------------------------------------------------------------
+# Series catalog — Wikidata P179 (part of series) + P1545 (series ordinal)
+# ---------------------------------------------------------------------------
+
+_SERIES_SKIP_WORDS = {
+    "fictional", "character", "film", "television", "tv", "album",
+    "song", "video game", "magazine", "newspaper", "comic",
+}
+_SERIES_KEEP_WORDS = {
+    "series", "novel", "book", "fiction", "fantasy", "saga",
+    "sequence", "trilogy", "quartet", "cycle",
+}
+
+
+def _normalize_series(name: str) -> str:
+    return re.sub(r"^the\s+", "", name.strip().lower())
+
+
+def _find_series_qid(series_name: str) -> str | None:
+    """Search Wikidata for a book-series item by name.
+
+    Tries the name as given, then with/without a leading 'The '.
+    Prefers results whose description mentions series/fiction words and
+    avoids film/TV/game entries.
+    """
+    variants: list[str] = [series_name]
+    norm = _normalize_series(series_name)
+    if series_name.lower().startswith("the "):
+        variants.append(norm[0].upper() + norm[1:])  # without "The"
+    else:
+        variants.append("The " + series_name)
+
+    target = _normalize_series(series_name)
+
+    for variant in variants:
+        try:
+            data = _get(_WD, {
+                "action": "wbsearchentities",
+                "search": variant,
+                "language": "en",
+                "type": "item",
+                "limit": 10,
+            })
+        except Exception:
+            continue
+
+        items = data.get("search", [])
+
+        # First pass: name matches + description signals it's a book series
+        for item in items:
+            if _normalize_series(item.get("label", "")) != target:
+                continue
+            desc = (item.get("description") or "").lower()
+            if any(w in desc for w in _SERIES_SKIP_WORDS):
+                continue
+            if any(w in desc for w in _SERIES_KEEP_WORDS):
+                return item["id"]
+
+        # Second pass: name matches, ignore description (might just say "Wikimedia list")
+        for item in items:
+            if _normalize_series(item.get("label", "")) != target:
+                continue
+            desc = (item.get("description") or "").lower()
+            if not any(w in desc for w in _SERIES_SKIP_WORDS):
+                return item["id"]
+
+    return None
+
+
+def fetch_series_catalog(series_name: str) -> list[dict]:
+    """Return all main-series books from Wikidata, ordered by publication date.
+
+    Wikidata's P1545 (series ordinal) is almost never populated, so positions
+    are assigned sequentially in publication-date order (1 = earliest), which
+    matches reading order for the vast majority of genre fiction series.
+
+    Filters applied to exclude non-novel entries:
+      - Items that are themselves sub-series (e.g. omnibus trilogies)
+      - Items whose P31 (instance of) is a known collection/compilation type
+
+    Returns a list sorted by position:
+        {"position": int, "title": str, "ol_work_key": None, "cover_url": None}
+    Returns [] when the series isn't in Wikidata or has no dated entries.
+    """
+    qid = _find_series_qid(series_name)
+    if not qid:
+        return []
+
+    time.sleep(0.5)
+
+    # Excluded P31 (instance-of) types: collection of literary works (Q108329152),
+    # short story collection (Q1279564), book series (Q7725310),
+    # novel series (Q18593264), anthology (Q57875990), series (Q386724)
+    query = f"""
+SELECT DISTINCT ?work ?workLabel ?pubdate WHERE {{
+  ?work wdt:P179 wd:{qid} ;
+        wdt:P577 ?pubdate ;
+        wdt:P31 ?type .
+  FILTER(?type NOT IN (
+    wd:Q108329152, wd:Q1279564, wd:Q7725310,
+    wd:Q18593264, wd:Q57875990, wd:Q386724
+  ))
+  SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en" }}
+}}
+ORDER BY ?pubdate
+LIMIT 100
+"""
+    try:
+        r = requests.get(
+            _WD_SPARQL,
+            params={"query": query, "format": "json"},
+            headers=_UA,
+            timeout=20,
+        )
+        r.raise_for_status()
+        bindings = r.json()["results"]["bindings"]
+    except Exception:
+        return []
+
+    seen: set[str] = set()
+    results: list[dict] = []
+    for b in bindings:
+        title = b.get("workLabel", {}).get("value", "")
+        if not title or title.startswith("Q"):  # unresolved QID
+            continue
+        if title in seen:
+            continue
+        seen.add(title)
+        results.append({
+            "title":       title,
+            "ol_work_key": None,
+            "cover_url":   None,
+        })
+
+    # Assign sequential positions in publication-date order
+    return [{"position": i, **r} for i, r in enumerate(results, 1)]

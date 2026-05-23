@@ -441,18 +441,20 @@ _series_state: dict = {
 def _run_series_enrich_bg() -> None:
     from datetime import timedelta
     from db.database import SessionLocal
+    import ingest.wikidata as wd
 
     db = SessionLocal()
     try:
-        # Collect (series_name, ol_work_key) — one work key per series is enough
-        rows = (
+        # Collect all series names; also grab ol_work_key for the OL fallback
+        all_rows = (
             db.query(Book.series_name, Book.ol_work_key)
-            .filter(Book.series_name.isnot(None), Book.ol_work_key.isnot(None))
+            .filter(Book.series_name.isnot(None))
             .all()
         )
-        seen: dict[str, str] = {}
-        for name, wk in rows:
-            if name and wk and name not in seen:
+        # series_name → first ol_work_key found (may be None)
+        seen: dict[str, str | None] = {}
+        for name, wk in all_rows:
+            if name and name not in seen:
                 seen[name] = wk
 
         stale_cutoff = datetime.utcnow() - timedelta(days=7)
@@ -474,7 +476,12 @@ def _run_series_enrich_bg() -> None:
             with _series_lock:
                 _series_state["current"] = series_name
 
-            _, entries = ol.fetch_series_catalog(series_name, ol_work_key)
+            # Primary: Wikidata (P179 part-of-series + P1545 series ordinal)
+            entries = wd.fetch_series_catalog(series_name)
+
+            # Fallback: OL work/series/seeds chain if Wikidata returned nothing
+            if not entries and ol_work_key:
+                _, entries = ol.fetch_series_catalog(series_name, ol_work_key)
             now = datetime.utcnow()
 
             db.query(SeriesCatalog).filter(
