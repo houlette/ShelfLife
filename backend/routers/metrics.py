@@ -204,19 +204,17 @@ def _book_dict(b: Book) -> dict:
 
 @router.get("/series")
 def get_series(db: Session = Depends(get_db)):
-    """Return all series from the user's library, merged with the OL catalog."""
+    """Return all series merged with the OL catalog; infer gaps when no catalog."""
     owned_books = (
         db.query(Book)
         .filter(Book.series_name.isnot(None))
         .all()
     )
 
-    # Group owned books by lowercased series key
     by_key: dict[str, list[Book]] = defaultdict(list)
     for b in owned_books:
         by_key[b.series_name.lower()].append(b)
 
-    # Fetch catalog rows for all these series in one query
     keys = list(by_key.keys())
     catalog_rows = (
         db.query(SeriesCatalog)
@@ -230,27 +228,24 @@ def get_series(db: Session = Depends(get_db)):
 
     result = []
     for key, books in by_key.items():
-        # Prefer original case from the most common book
         display_name = books[0].series_name
         author = next((b.author for b in books if b.author), None)
 
-        # Map position → owned book
         owned_map: dict[int, Book] = {}
         for b in books:
             if b.series_position:
                 owned_map[b.series_position] = b
 
-        catalog = sorted(by_catalog.get(key, []), key=lambda r: r.position or 0)
+        catalog = by_catalog.get(key, [])
+        catalog_map: dict[int, SeriesCatalog] = {r.position: r for r in catalog if r.position}
         catalog_fetched = bool(catalog)
 
-        # Merge positions: catalog rows plus any owned positions not in catalog
-        all_positions: set[int] = set(owned_map.keys())
-        for row in catalog:
-            if row.position:
-                all_positions.add(row.position)
+        # All known positions from owned books and catalog
+        all_positions: set[int] = set(owned_map.keys()) | set(catalog_map.keys())
 
-        # Build catalog lookup
-        catalog_map: dict[int, SeriesCatalog] = {r.position: r for r in catalog if r.position}
+        # Fill gaps within the min–max range so missing books are shown
+        if all_positions:
+            all_positions = set(range(min(all_positions), max(all_positions) + 1))
 
         entries = []
         for pos in sorted(all_positions):
