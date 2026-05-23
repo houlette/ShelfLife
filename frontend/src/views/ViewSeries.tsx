@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../api'
 import type { SeriesStat, SeriesEntry } from '../types'
@@ -153,12 +153,16 @@ export function ViewSeries() {
     await api.enrichSeries()
   }
 
-  const isRunning = enrichStatus?.running ?? false
-  if (!enriching && isRunning) setEnriching(true)
-  if (enriching && !isRunning && enrichStatus?.processed === enrichStatus?.total && (enrichStatus?.total ?? 0) > 0) {
-    setEnriching(false)
-    refetch()
-  }
+  // Drive enriching flag from polled status so it resets when task finishes
+  useEffect(() => {
+    if (!enrichStatus) return
+    if (enrichStatus.running) {
+      setEnriching(true)
+    } else if (enriching) {
+      setEnriching(false)
+      refetch()
+    }
+  }, [enrichStatus])
 
   const FILTERS: { id: StatusFilter; label: string }[] = [
     { id: 'all',         label: 'All' },
@@ -189,7 +193,7 @@ export function ViewSeries() {
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
               Shows all books in each series — including entries you don't own yet.
-              {isRunning && enrichStatus && (
+              {enriching && enrichStatus && (
                 <span> Fetching… {enrichStatus.processed}/{enrichStatus.total}
                   {enrichStatus.current && ` — ${enrichStatus.current}`}
                 </span>
@@ -198,17 +202,17 @@ export function ViewSeries() {
           </div>
           <button
             onClick={startEnrich}
-            disabled={isRunning || enriching}
+            disabled={enriching}
             style={{
               padding: '8px 18px', fontSize: 13, borderRadius: 4,
-              background: isRunning || enriching ? 'var(--surface)' : 'var(--ink)',
-              color:      isRunning || enriching ? 'var(--muted)'   : 'var(--paper)',
+              background: enriching ? 'var(--surface)' : 'var(--ink)',
+              color:      enriching ? 'var(--muted)'   : 'var(--paper)',
               border: '1px solid var(--line)',
-              cursor: isRunning || enriching ? 'default' : 'pointer',
+              cursor: enriching ? 'default' : 'pointer',
               fontFamily: 'inherit', whiteSpace: 'nowrap',
             }}
           >
-            {isRunning || enriching ? 'Fetching…' : 'Fetch series data'}
+            {enriching ? 'Fetching…' : 'Fetch series data'}
           </button>
         </div>
       </Card>
