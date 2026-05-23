@@ -1,3 +1,5 @@
+import os
+import secrets
 from pathlib import Path
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
@@ -43,6 +45,9 @@ _MIGRATIONS = [
     ("books", "author_diversity_manual BOOLEAN DEFAULT FALSE"),
     ("books", "series_name VARCHAR(255)"),
     ("books", "series_position INTEGER"),
+    ("discovery_candidates", "user_id INTEGER REFERENCES users(id)"),
+    ("booklist_pending", "user_id INTEGER REFERENCES users(id)"),
+    ("ingest_log", "user_id INTEGER REFERENCES users(id)"),
 ]
 
 _INDEXES = [
@@ -81,6 +86,56 @@ def _backfill_series() -> None:
         db.close()
 
 
+def _migrate_to_multiuser() -> None:
+    """Bootstrap multi-user schema. Idempotent: skips if any users already exist."""
+    with engine.connect() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM users")).scalar()
+        if count > 0:
+            return  # Already set up
+
+        email = os.environ.get("SHELFLIFE_BOOTSTRAP_EMAIL", "")
+        password = os.environ.get("SHELFLIFE_BOOTSTRAP_PASSWORD", "")
+        if not email or not password:
+            return  # No bootstrap credentials configured
+
+        from auth import hash_password
+        hashed = hash_password(password)
+        display_name = email.split("@")[0]
+        conn.execute(text(
+            "INSERT INTO users (email, hashed_pw, is_admin, display_name, created_at) "
+            "VALUES (:email, :hashed_pw, 1, :display_name, datetime('now'))"
+        ), {"email": email, "hashed_pw": hashed, "display_name": display_name})
+        conn.commit()
+
+        # Copy all existing books into user_books for the bootstrap user (id=1)
+        conn.execute(text("""
+            INSERT INTO user_books
+                (user_id, book_id, exclusive_shelf, my_rating, date_read,
+                 date_added, my_review, bookshelves, read_count, year_acquired)
+            SELECT
+                1, id, exclusive_shelf, my_rating, date_read,
+                date_added, my_review, bookshelves, read_count, year_acquired
+            FROM books
+        """))
+        conn.commit()
+
+        # Assign existing rows in other tables to the bootstrap user
+        conn.execute(text("UPDATE discovery_candidates SET user_id = 1 WHERE user_id IS NULL"))
+        conn.execute(text("UPDATE booklist_pending SET user_id = 1 WHERE user_id IS NULL"))
+        conn.execute(text("UPDATE ingest_log SET user_id = 1 WHERE user_id IS NULL"))
+        conn.commit()
+
+        # Create the first invite code and print it to stdout
+        code = secrets.token_urlsafe(32)
+        conn.execute(text(
+            "INSERT INTO invite_codes (code, created_by) VALUES (:code, 1)"
+        ), {"code": code})
+        conn.commit()
+
+        print(f"\n[ShelfLife] Bootstrap complete — admin: {email}")
+        print(f"[ShelfLife] First invite code: {code}\n")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     _run_migrations()
@@ -91,6 +146,7 @@ def init_db():
                 conn.commit()
             except Exception:
                 pass
+    _migrate_to_multiuser()
     _backfill_series()
 
 

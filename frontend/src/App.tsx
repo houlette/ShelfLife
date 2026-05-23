@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { api } from './api'
+import { AuthProvider, useAuth } from './auth'
 import type { Book } from './types'
 import { nfmt } from './utils'
 import type { Range, Granularity } from './utils'
@@ -17,13 +18,15 @@ import { ViewImport }    from './views/ViewImport'
 import { ViewInsights }  from './views/ViewInsights'
 import { ViewSeries }    from './views/ViewSeries'
 import { ViewSettings }  from './views/ViewSettings'
+import { ViewLogin }     from './views/ViewLogin'
+import { ViewAdmin }     from './views/ViewAdmin'
 import { NavigationContext } from './context'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } },
 })
 
-type ViewId = 'overview' | 'timeline' | 'shelves' | 'authors' | 'genres' | 'ratings' | 'books' | 'recommend' | 'discover' | 'insights' | 'series' | 'import' | 'settings'
+type ViewId = 'overview' | 'timeline' | 'shelves' | 'authors' | 'genres' | 'ratings' | 'books' | 'recommend' | 'discover' | 'insights' | 'series' | 'import' | 'settings' | 'admin'
 type Theme  = 'paper' | 'midnight' | 'clinic'
 
 const NAV: { id: ViewId; label: string; no: string }[] = [
@@ -59,6 +62,7 @@ function SideNav({ view, setView, books, theme, setTheme }: {
   theme: Theme
   setTheme: (t: Theme) => void
 }) {
+  const { user, logout } = useAuth()
   const readCount = books.filter(b => b.exclusive_shelf === 'read').length
 
   return (
@@ -69,7 +73,6 @@ function SideNav({ view, setView, books, theme, setTheme }: {
       width: 220, overflow: 'hidden',
     }}>
       <div style={{ paddingBottom: 28, borderBottom: '1px solid var(--line)', position: 'relative' }}>
-        {/* Mini book-spine motif */}
         <div style={{ display: 'flex', gap: 2, height: 20, marginBottom: 10, alignItems: 'flex-end' }}>
           {[
             { h: 18, c: 'var(--accent)',    w: 4 },
@@ -131,15 +134,41 @@ function SideNav({ view, setView, books, theme, setTheme }: {
           <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>⚙</span>
           <span style={{ fontSize: 13.5 }}>Settings</span>
         </button>
+        {user?.is_admin && (
+          <button onClick={() => setView('admin')} style={{
+            display: 'grid', gridTemplateColumns: '22px 1fr',
+            width: '100%', textAlign: 'left',
+            padding: '10px 4px', border: 'none',
+            background: 'transparent', cursor: 'pointer',
+            fontFamily: 'inherit', marginTop: 2,
+            color: view === 'admin' ? 'var(--ink)' : 'var(--muted)',
+          }}>
+            <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>★</span>
+            <span style={{ fontSize: 13.5 }}>Admin</span>
+          </button>
+        )}
       </nav>
 
       <div style={{ borderTop: '1px solid var(--line)', paddingTop: 20 }}>
-        <div style={{ marginBottom: 16 }}>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>Library</div>
+        <div style={{ marginBottom: 12 }}>
+          <div className="eyebrow" style={{ marginBottom: 2 }}>Library</div>
           <div className="num" style={{ fontSize: 13, color: 'var(--ink)' }}>
             {nfmt(readCount)} books read
           </div>
         </div>
+        {user && (
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
+              {user.display_name || user.email}
+            </div>
+            <button onClick={logout} style={{
+              padding: '3px 7px', fontSize: 10, borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
+              background: 'transparent', color: 'var(--muted)', border: '1px solid var(--line)',
+            }}>
+              Sign out
+            </button>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6 }}>
           {(['paper', 'midnight', 'clinic'] as Theme[]).map(t => (
             <button key={t} onClick={() => setTheme(t)} style={{
@@ -200,6 +229,7 @@ function Header({ range, setRange, granularity, setGranularity }: {
 }
 
 function AppShell() {
+  const { user } = useAuth()
   const [view,        setView]        = useState<ViewId>('overview')
   const [range,       setRange]       = useState<Range>('all')
   const [granularity, setGranularity] = useState<Granularity>('year')
@@ -212,7 +242,13 @@ function AppShell() {
   const { data: books = [], isLoading, error } = useQuery({
     queryKey: ['books'],
     queryFn: () => api.books(),
+    enabled: !!user,
   })
+
+  // Show login if no user
+  if (!user) {
+    return <ViewLogin />
+  }
 
   if (isLoading) {
     return (
@@ -253,6 +289,7 @@ function AppShell() {
         {view === 'series'    && <ViewSeries />}
         {view === 'import'    && <ViewImport />}
         {view === 'settings'  && <ViewSettings  theme={theme} setTheme={setTheme} />}
+        {view === 'admin'     && <ViewAdmin />}
       </main>
     </div>
     </NavigationContext.Provider>
@@ -262,7 +299,9 @@ function AppShell() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell />
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }

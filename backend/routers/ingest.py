@@ -5,8 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from auth import get_current_user
 from db.database import get_db
-from db.models import Book, BooklistPending, IngestLog, SeriesCatalog
+from db.models import Book, BooklistPending, IngestLog, SeriesCatalog, User, UserBook
 import ingest.goodreads as goodreads_ingest
 import ingest.booklist as booklist_ingest
 import ingest.openlibrary as ol
@@ -135,7 +136,7 @@ def _run_diversity_bg(limit: int | None) -> None:
             _diversity_state["running"] = False
 
 
-def _log(db: Session, source: str, filename: str, result: dict, status: str = "ok"):
+def _log(db: Session, source: str, filename: str, result: dict, status: str = "ok", user_id: int | None = None):
     log = IngestLog(
         source=source,
         filename=filename,
@@ -144,55 +145,76 @@ def _log(db: Session, source: str, filename: str, result: dict, status: str = "o
         ingested_at=datetime.utcnow(),
         status=status,
         message=str(result.get("errors", [])) if result.get("errors") else None,
+        user_id=user_id,
     )
     db.add(log)
     db.commit()
 
 
 @router.post("/goodreads")
-async def upload_goodreads(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_goodreads(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(400, "Expected a .csv file")
     content = await file.read()
     try:
-        result = goodreads_ingest.ingest_csv(content, db)
-        _log(db, "goodreads", file.filename, result)
+        result = goodreads_ingest.ingest_csv(content, db, user_id=current_user.id)
+        _log(db, "goodreads", file.filename, result, user_id=current_user.id)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @router.post("/booklist")
-async def upload_booklist(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_booklist(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(400, "Expected a .csv file")
     content = await file.read()
     try:
         result = booklist_ingest.ingest_csv(content, db)
-        _log(db, "booklist", file.filename, result)
+        _log(db, "booklist", file.filename, result, user_id=current_user.id)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @router.get("/booklist/pending")
-def booklist_pending(db: Session = Depends(get_db)):
+def booklist_pending(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Return unresolved pending entries with candidate book details for disambiguation UI."""
     import json as _json
-    entries = db.query(BooklistPending).filter(BooklistPending.status == "pending").all()
+    entries = (
+        db.query(BooklistPending)
+        .filter(BooklistPending.status == "pending", BooklistPending.user_id == current_user.id)
+        .all()
+    )
     result = []
     for entry in entries:
         candidate_ids: list[int] = _json.loads(entry.candidate_book_ids or "[]")
         candidates = []
-        for book in db.query(Book).filter(Book.id.in_(candidate_ids)).all():
+        for book, ub in (
+            db.query(Book, UserBook)
+            .outerjoin(UserBook, (UserBook.book_id == Book.id) & (UserBook.user_id == current_user.id))
+            .filter(Book.id.in_(candidate_ids))
+            .all()
+        ):
             candidates.append({
                 "id": book.id,
                 "title": book.title,
                 "author": book.author,
                 "cover_url": book.cover_url,
-                "exclusive_shelf": book.exclusive_shelf,
+                "exclusive_shelf": ub.exclusive_shelf if ub else None,
                 "original_pub_year": book.original_pub_year,
-                "my_rating": book.my_rating,
+                "my_rating": ub.my_rating if ub else 0,
             })
         result.append({
             "id": entry.id,
@@ -212,6 +234,7 @@ def resolve_pending(
     action: str,
     book_id: int | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Resolve a pending disambiguation entry.
 
@@ -260,7 +283,7 @@ def resolve_pending(
 
 
 @router.post("/enrich-covers")
-def enrich_covers(limit: int | None = None):
+def enrich_covers(limit: int | None = None, current_user: User = Depends(get_current_user)):
     """Start cover backfill in a background thread.  Returns immediately.
 
     Calling while a job is already running returns the current state without
@@ -278,7 +301,7 @@ def enrich_covers(limit: int | None = None):
 
 
 @router.post("/enrich")
-def enrich_library(limit: int | None = None):
+def enrich_library(limit: int | None = None, current_user: User = Depends(get_current_user)):
     """Start OL enrichment in a background thread.  Returns immediately.
 
     Calling while a job is already running returns the current state without
@@ -296,7 +319,7 @@ def enrich_library(limit: int | None = None):
 
 
 @router.post("/diversity-enrich")
-def diversity_enrich(limit: int | None = None, db: Session = Depends(get_db)):
+def diversity_enrich(limit: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Start background diversity enrichment.  Returns immediately.
 
     If enrichment is already running, returns the current state without
@@ -323,7 +346,7 @@ def diversity_enrich(limit: int | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("/diversity-enrich/stop")
-def diversity_enrich_stop():
+def diversity_enrich_stop(current_user: User = Depends(get_current_user)):
     """Ask the running enrichment thread to stop after the current author."""
     with _diversity_lock:
         _diversity_state["stop_flag"][0] = True
@@ -331,7 +354,7 @@ def diversity_enrich_stop():
 
 
 @router.post("/diversity-enrich/reset")
-def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_db)):
+def diversity_enrich_reset(scope: str = "unresolved", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Clear diversity_enriched_at so affected authors are re-queried next run.
 
     scope="unresolved"     — authors searched but no origin found (default).
@@ -367,7 +390,7 @@ class _UpdateAuthorDiversityBody(BaseModel):
 
 
 @router.patch("/author-diversity")
-def update_author_diversity(body: _UpdateAuthorDiversityBody, db: Session = Depends(get_db)):
+def update_author_diversity(body: _UpdateAuthorDiversityBody, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Set gender / ethnicity for every book by a given author and mark as manual.
 
     Manually-edited authors are excluded from all reset scopes and from the
@@ -387,20 +410,27 @@ def update_author_diversity(body: _UpdateAuthorDiversityBody, db: Session = Depe
 
 
 @router.get("/diversity-enrich/status")
-def diversity_enrich_status(db: Session = Depends(get_db)):
+def diversity_enrich_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Coverage stats + current background task state."""
     from sqlalchemy import distinct
 
-    read_q = db.query(Book).filter(Book.exclusive_shelf == "read", Book.author.isnot(None))
-    total_read    = read_q.count()
-    searched      = read_q.filter(Book.diversity_enriched_at.isnot(None)).count()
-    with_gender   = read_q.filter(Book.author_gender.isnot(None)).count()
+    # Join UserBook → Book to scope to this user's read books
+    read_q = (
+        db.query(Book)
+        .join(UserBook, (UserBook.book_id == Book.id) & (UserBook.user_id == current_user.id))
+        .filter(UserBook.exclusive_shelf == "read", Book.author.isnot(None))
+    )
+    total_read     = read_q.count()
+    searched       = read_q.filter(Book.diversity_enriched_at.isnot(None)).count()
+    with_gender    = read_q.filter(Book.author_gender.isnot(None)).count()
     with_ethnicity = read_q.filter(Book.author_ethnicity.isnot(None)).count()
-    total_authors = db.query(func.count(distinct(Book.author))).filter(
-        Book.exclusive_shelf == "read", Book.author.isnot(None)
-    ).scalar() or 0
-    searched_authors = db.query(func.count(distinct(Book.author))).filter(
-        Book.exclusive_shelf == "read",
+    total_authors = db.query(func.count(distinct(Book.author))).join(
+        UserBook, (UserBook.book_id == Book.id) & (UserBook.user_id == current_user.id)
+    ).filter(UserBook.exclusive_shelf == "read", Book.author.isnot(None)).scalar() or 0
+    searched_authors = db.query(func.count(distinct(Book.author))).join(
+        UserBook, (UserBook.book_id == Book.id) & (UserBook.user_id == current_user.id)
+    ).filter(
+        UserBook.exclusive_shelf == "read",
         Book.author.isnot(None),
         Book.diversity_enriched_at.isnot(None),
     ).scalar() or 0
@@ -420,7 +450,7 @@ def diversity_enrich_status(db: Session = Depends(get_db)):
 
 
 @router.post("/reclassify")
-def reclassify(db: Session = Depends(get_db)):
+def reclassify(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Re-run genre classification on stored subjects without re-fetching from OL."""
     return ol.reclassify_all(db)
 
@@ -523,7 +553,7 @@ def _run_series_enrich_bg() -> None:
 
 
 @router.post("/enrich-series")
-def enrich_series():
+def enrich_series(current_user: User = Depends(get_current_user)):
     """Start a background task that fetches the complete book list for each
     series from Open Library and caches it in series_catalog."""
     with _series_lock:
@@ -535,13 +565,13 @@ def enrich_series():
 
 
 @router.get("/series-enrich/status")
-def series_enrich_status():
+def series_enrich_status(current_user: User = Depends(get_current_user)):
     with _series_lock:
         return dict(_series_state)
 
 
 @router.post("/cf-rebuild")
-def cf_rebuild(source: str = "ucsd", db: Session = Depends(get_db)):
+def cf_rebuild(source: str = "ucsd", db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Ingest a CF source and rebuild item-item similarity.
     `source` ∈ {"ucsd", "goodbooks"}. UCSD-Goodreads (Wan & McAuley) is the default."""
     from pathlib import Path
@@ -577,7 +607,7 @@ def cf_rebuild(source: str = "ucsd", db: Session = Depends(get_db)):
 
 
 @router.get("/cf-status")
-def cf_status(db: Session = Depends(get_db)):
+def cf_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from sqlalchemy import func
     from db.models import ExternalRating, BookSimilarity
     n_ratings = db.query(func.count(ExternalRating.id)).scalar() or 0
@@ -591,7 +621,7 @@ def cf_status(db: Session = Depends(get_db)):
 
 
 @router.get("/enrich/status")
-def enrich_status(db: Session = Depends(get_db)):
+def enrich_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from sqlalchemy import func
     total = db.query(func.count(Book.id)).scalar() or 0
     with_isbn = db.query(func.count(Book.id)).filter(
@@ -617,12 +647,12 @@ def enrich_status(db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def ingest_status(db: Session = Depends(get_db)):
+def ingest_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     row = db.query(
-        func.count(Book.id),
-        func.min(Book.date_added),
-        func.max(Book.date_added),
-    ).first()
+        func.count(UserBook.id),
+        func.min(UserBook.date_added),
+        func.max(UserBook.date_added),
+    ).filter(UserBook.user_id == current_user.id).first()
 
     return {
         "books": {
@@ -638,6 +668,9 @@ def ingest_status(db: Session = Depends(get_db)):
                 "records": l.records_inserted,
                 "at": str(l.ingested_at),
             }
-            for l in db.query(IngestLog).order_by(IngestLog.ingested_at.desc()).limit(20)
+            for l in db.query(IngestLog)
+            .filter(IngestLog.user_id == current_user.id)
+            .order_by(IngestLog.ingested_at.desc())
+            .limit(20)
         ],
     }
