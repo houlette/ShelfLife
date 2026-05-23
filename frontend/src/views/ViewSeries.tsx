@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api'
 import type { SeriesStat, SeriesEntry } from '../types'
 import { SectionTitle, Card, StatCard } from '../components'
@@ -127,8 +127,9 @@ function SeriesCard({ series }: { series: SeriesStat }) {
 export function ViewSeries() {
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [enriching, setEnriching] = useState(false)
+  const qc = useQueryClient()
 
-  const { data: allSeries = [], isLoading, refetch } = useQuery({
+  const { data: allSeries = [], isLoading } = useQuery({
     queryKey: ['series'],
     queryFn: () => api.series(),
   })
@@ -160,7 +161,7 @@ export function ViewSeries() {
       setEnriching(true)
     } else if (enriching) {
       setEnriching(false)
-      refetch()
+      qc.invalidateQueries({ queryKey: ['series'] })
     }
   }, [enrichStatus])
 

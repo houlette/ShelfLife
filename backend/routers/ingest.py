@@ -474,11 +474,13 @@ def _run_series_enrich_bg() -> None:
             entries = ol.fetch_series_catalog(series_name, author)
             now = datetime.utcnow()
 
+            # Always delete and re-insert so fetched_at is updated even when OL
+            # returns no parseable results — this marks the series as "attempted"
+            # so the UI stops showing "fetch for full list".
+            db.query(SeriesCatalog).filter(
+                SeriesCatalog.series_key == series_name.lower()
+            ).delete()
             if entries:
-                # Delete old catalog rows for this series, insert fresh
-                db.query(SeriesCatalog).filter(
-                    SeriesCatalog.series_key == series_name.lower()
-                ).delete()
                 for e in entries:
                     db.add(SeriesCatalog(
                         series_key=series_name.lower(),
@@ -490,7 +492,15 @@ def _run_series_enrich_bg() -> None:
                         cover_url=e["cover_url"],
                         fetched_at=now,
                     ))
-                db.commit()
+            else:
+                # Sentinel row — marks the series as fetched even if OL returned
+                # no titles with parseable position numbers.
+                db.add(SeriesCatalog(
+                    series_key=series_name.lower(),
+                    display_name=series_name,
+                    fetched_at=now,
+                ))
+            db.commit()
 
             with _series_lock:
                 _series_state["processed"] += 1
