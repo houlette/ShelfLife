@@ -15,6 +15,7 @@ import { ViewDiscover }  from './views/ViewDiscover'
 import { ViewBooks }     from './views/ViewBooks'
 import { ViewImport }    from './views/ViewImport'
 import { ViewInsights }  from './views/ViewInsights'
+import { ViewSeries }    from './views/ViewSeries'
 import { ViewSettings }  from './views/ViewSettings'
 import { NavigationContext } from './context'
 
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } },
 })
 
-type ViewId = 'overview' | 'timeline' | 'shelves' | 'authors' | 'genres' | 'ratings' | 'books' | 'recommend' | 'discover' | 'insights' | 'import' | 'settings'
+type ViewId = 'overview' | 'timeline' | 'shelves' | 'authors' | 'genres' | 'ratings' | 'books' | 'recommend' | 'discover' | 'insights' | 'series' | 'import' | 'settings'
 type Theme  = 'paper' | 'midnight' | 'clinic'
 
 const NAV: { id: ViewId; label: string; no: string }[] = [
@@ -36,6 +37,7 @@ const NAV: { id: ViewId; label: string; no: string }[] = [
   { id: 'recommend', label: 'Recommend', no: '08' },
   { id: 'discover',  label: 'Discover',  no: '09' },
   { id: 'insights',  label: 'Insights',  no: '10' },
+  { id: 'series',    label: 'Series',    no: '11' },
 ]
 
 const RANGE_OPTIONS: { id: Range; label: string }[] = [
@@ -248,6 +250,7 @@ function AppShell() {
         {view === 'recommend' && <ViewRecommend />}
         {view === 'discover'  && <ViewDiscover />}
         {view === 'insights'  && <ViewInsights />}
+        {view === 'series'    && <ViewSeries />}
         {view === 'import'    && <ViewImport />}
         {view === 'settings'  && <ViewSettings  theme={theme} setTheme={setTheme} />}
       </main>

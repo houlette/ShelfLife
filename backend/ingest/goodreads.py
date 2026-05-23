@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from db.models import Book
+from ingest.series import parse_series
 
 
 def _parse_date(s: str) -> date | None:
@@ -80,6 +81,8 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
         bookshelves_raw = row.get("Bookshelves", "").strip()
         bookshelves = bookshelves_raw if bookshelves_raw else None
 
+        series_name, series_position = parse_series(title)
+
         entry = {
             "goodreads_book_id": book_id,
             "title": title,
@@ -103,6 +106,8 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
             "private_notes": row.get("Private Notes", "").strip() or None,
             "read_count": _safe_int(row.get("Read Count", "1")) or 1,
             "owned_copies": _safe_int(row.get("Owned Copies", "0")) or 0,
+            "series_name": series_name,
+            "series_position": series_position,
         }
 
         stmt = (

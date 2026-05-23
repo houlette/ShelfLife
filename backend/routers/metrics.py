@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.database import get_db
-from db.models import Book
+from db.models import Book, SeriesCatalog
 from recommend import compute_recommendations
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -197,7 +197,84 @@ def _book_dict(b: Book) -> dict:
         "year_acquired": b.year_acquired,
         "author_gender": b.author_gender,
         "author_ethnicity": b.author_ethnicity,
+        "series_name": b.series_name,
+        "series_position": b.series_position,
     }
+
+
+@router.get("/series")
+def get_series(db: Session = Depends(get_db)):
+    """Return all series from the user's library, merged with the OL catalog."""
+    owned_books = (
+        db.query(Book)
+        .filter(Book.series_name.isnot(None))
+        .all()
+    )
+
+    # Group owned books by lowercased series key
+    by_key: dict[str, list[Book]] = defaultdict(list)
+    for b in owned_books:
+        by_key[b.series_name.lower()].append(b)
+
+    # Fetch catalog rows for all these series in one query
+    keys = list(by_key.keys())
+    catalog_rows = (
+        db.query(SeriesCatalog)
+        .filter(SeriesCatalog.series_key.in_(keys))
+        .all()
+    ) if keys else []
+
+    by_catalog: dict[str, list[SeriesCatalog]] = defaultdict(list)
+    for row in catalog_rows:
+        by_catalog[row.series_key].append(row)
+
+    result = []
+    for key, books in by_key.items():
+        # Prefer original case from the most common book
+        display_name = books[0].series_name
+        author = next((b.author for b in books if b.author), None)
+
+        # Map position → owned book
+        owned_map: dict[int, Book] = {}
+        for b in books:
+            if b.series_position:
+                owned_map[b.series_position] = b
+
+        catalog = sorted(by_catalog.get(key, []), key=lambda r: r.position or 0)
+        catalog_fetched = bool(catalog)
+
+        # Merge positions: catalog rows plus any owned positions not in catalog
+        all_positions: set[int] = set(owned_map.keys())
+        for row in catalog:
+            if row.position:
+                all_positions.add(row.position)
+
+        # Build catalog lookup
+        catalog_map: dict[int, SeriesCatalog] = {r.position: r for r in catalog if r.position}
+
+        entries = []
+        for pos in sorted(all_positions):
+            owned_book = owned_map.get(pos)
+            catalog_row = catalog_map.get(pos)
+            entries.append({
+                "position":  pos,
+                "title":     (owned_book.title if owned_book else None) or (catalog_row.title if catalog_row else None),
+                "shelf":     owned_book.exclusive_shelf if owned_book else None,
+                "cover_url": (owned_book.cover_url if owned_book else None) or (catalog_row.cover_url if catalog_row else None),
+                "book_id":   owned_book.id if owned_book else None,
+                "owned":     owned_book is not None,
+            })
+
+        result.append({
+            "name":            display_name,
+            "key":             key,
+            "author":          author,
+            "catalog_fetched": catalog_fetched,
+            "entries":         entries,
+        })
+
+    result.sort(key=lambda x: x["name"].lower())
+    return result
 
 
 @router.get("/genres")
