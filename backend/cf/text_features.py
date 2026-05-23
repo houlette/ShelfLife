@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from db.models import Book, BookReviewAgg
+from db.models import Book, BookReviewAgg, UserBook
 
 K_NEIGHBORS = 15        # use top-K most-similar rated books
 MIN_AVG_SIM = 0.05      # require average similarity above this to use a prediction
@@ -111,7 +111,7 @@ class TextPredictor:
         }
 
 
-def load_predictor(db: Session) -> TextPredictor | None:
+def load_predictor(db: Session, user_id: int | None = None) -> TextPredictor | None:
     """Build TF-IDF vectors from BookReviewAgg rows. Returns None if no data."""
     rows = db.query(BookReviewAgg.book_id, BookReviewAgg.text).all()
     if not rows:
@@ -124,10 +124,16 @@ def load_predictor(db: Session) -> TextPredictor | None:
     vectors = {bid: _tfidf_vector(toks, idf) for bid, toks in docs.items()}
     vectors = {bid: v for bid, v in vectors.items() if v}
 
-    user_ratings: dict[int, float] = {
-        b.id: float(b.my_rating) for b in db.query(Book).filter(
-            Book.exclusive_shelf == "read",
-            Book.my_rating != None, Book.my_rating > 0,
-        ).all()
-    }
+    if user_id is not None:
+        user_ratings = {
+            ub.book_id: float(ub.my_rating)
+            for ub in db.query(UserBook).filter(
+                UserBook.user_id == user_id,
+                UserBook.exclusive_shelf == "read",
+                UserBook.my_rating != None,
+                UserBook.my_rating > 0,
+            ).all()
+        }
+    else:
+        user_ratings = {}
     return TextPredictor(vectors, user_ratings)

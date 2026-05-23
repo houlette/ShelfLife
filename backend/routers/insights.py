@@ -5,13 +5,28 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from auth import get_current_user
 from db.database import get_db
-from db.models import Book
+from db.models import Book, User, UserBook
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 _cache: dict = {}
 _CACHE_TTL = 3600  # 1 hour; busts automatically when book count changes
+
+
+class _MergedInsight:
+    __slots__ = ("exclusive_shelf", "my_rating", "date_read", "date_added",
+                 "author", "title", "num_pages")
+
+    def __init__(self, ub: UserBook, b: Book):
+        self.exclusive_shelf = ub.exclusive_shelf
+        self.my_rating = ub.my_rating
+        self.date_read = ub.date_read
+        self.date_added = ub.date_added
+        self.author = b.author
+        self.title = b.title
+        self.num_pages = b.num_pages
 
 
 def _build_context(books: list[Book], period: str) -> str:
@@ -69,17 +84,27 @@ Recent reads:
 
 
 @router.get("/summary")
-def get_summary(period: str = Query("recent"), db: Session = Depends(get_db)):
+def get_summary(
+    period: str = Query("recent"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return {"summary": "Set ANTHROPIC_API_KEY in .env to enable AI-powered insights."}
 
-    books = db.query(Book).all()
+    pairs = (
+        db.query(UserBook, Book)
+        .join(Book, UserBook.book_id == Book.id)
+        .filter(UserBook.user_id == current_user.id)
+        .all()
+    )
+    books = [_MergedInsight(ub, b) for ub, b in pairs]
     if not books:
         return {"summary": "No data yet. Import your Goodreads library to get started."}
 
-    # Cache key includes book count so the cache busts automatically after imports.
-    cache_key = (period, len(books))
+    # Cache key includes user_id + book count so it busts after imports.
+    cache_key = (period, current_user.id, len(books))
     cached = _cache.get(cache_key)
     if cached and cached["expires_at"] > time.monotonic():
         return cached["result"]

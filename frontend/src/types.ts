@@ -1,3 +1,10 @@
+export interface AuthUser {
+  id: number
+  email: string
+  display_name: string
+  is_admin: boolean
+}
+
 export interface Book {
   id: number
   goodreads_book_id: number

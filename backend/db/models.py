@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, Integer, Float, String, Date, DateTime, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, Float, String, Date, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -54,6 +56,43 @@ class Book(Base):
     # Parsed from Goodreads title suffix, e.g. "Name of the Wind (Kingkiller Chronicle, #1)"
     series_name     = Column(String(255))
     series_position = Column(Integer)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id           = Column(Integer, primary_key=True)
+    email        = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_pw    = Column(String(255), nullable=False)
+    display_name = Column(String(100))
+    is_admin     = Column(Boolean, default=False)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+    id         = Column(Integer, primary_key=True)
+    code       = Column(String(64), unique=True, nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    used_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    used_at    = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+
+class UserBook(Base):
+    """Per-user reading relationship: shelf, rating, dates, review."""
+    __tablename__ = "user_books"
+    id              = Column(Integer, primary_key=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    book_id         = Column(Integer, ForeignKey("books.id"), nullable=False)
+    exclusive_shelf = Column(String(50))
+    my_rating       = Column(Integer)
+    date_read       = Column(Date)
+    date_added      = Column(Date)
+    my_review       = Column(Text)
+    bookshelves     = Column(Text)
+    read_count      = Column(Integer)
+    year_acquired   = Column(Integer)
+    __table_args__  = (UniqueConstraint("user_id", "book_id"),)
 
 
 class ExternalRating(Base):

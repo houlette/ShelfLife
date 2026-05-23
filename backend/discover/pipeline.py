@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from db.models import Book, DiscoveryCandidate
+from db.models import Book, DiscoveryCandidate, UserBook
 from ingest.openlibrary import normalize_genre
 import recommend
 from recommend import _build_profile, _score_book, _reason
@@ -27,11 +27,16 @@ def _normalize_title(title: str) -> str:
     return re.sub(r"[^a-z0-9]", "", title.lower())
 
 
-def _known_sets(db: Session) -> tuple[set[str], set[str]]:
-    """Return (ol_work_keys, normalized_titles) for all books already on shelf."""
-    books = db.query(Book).all()
-    work_keys = {b.ol_work_key for b in books if b.ol_work_key}
-    titles = {_normalize_title(b.title) for b in books if b.title}
+def _known_sets(db: Session, user_id: int) -> tuple[set[str], set[str]]:
+    """Return (ol_work_keys, normalized_titles) for all books in the user's library."""
+    pairs = (
+        db.query(UserBook, Book)
+        .join(Book, UserBook.book_id == Book.id)
+        .filter(UserBook.user_id == user_id)
+        .all()
+    )
+    work_keys = {b.ol_work_key for _, b in pairs if b.ol_work_key}
+    titles = {_normalize_title(b.title) for _, b in pairs if b.title}
     return work_keys, titles
 
 
@@ -70,24 +75,24 @@ def _series_ok(seed: dict, profile: dict) -> bool:
     return False
 
 
-def refresh_candidates(db: Session) -> dict[str, Any]:
+def refresh_candidates(db: Session, user_id: int) -> dict[str, Any]:
     """Full refresh: generate → dedup → upsert → score. Returns summary stats."""
     t0 = time.time()
 
-    profile = _build_profile(db)
-    known_keys, known_titles = _known_sets(db)
+    profile = _build_profile(db, user_id=user_id)
+    known_keys, known_titles = _known_sets(db, user_id=user_id)
 
     # --- Gather candidates from all sources ---
-    from_authors    = author_expansion.candidates(db, profile, known_keys, known_titles)
-    from_cf_authors = cf_author_expansion.candidates(db, profile, known_keys, known_titles)
+    from_authors    = author_expansion.candidates(db, profile, known_keys, known_titles, user_id=user_id)
+    from_cf_authors = cf_author_expansion.candidates(db, profile, known_keys, known_titles, user_id=user_id)
     from_subjects   = subject_expansion.candidates(db, profile, known_keys, known_titles)
 
     all_seeds = _dedup(from_authors + from_cf_authors + from_subjects)
 
-    # Filter candidates already dismissed or added
+    # Filter candidates already dismissed or added (scoped to this user)
     existing: dict[str, DiscoveryCandidate] = {
         c.ol_work_key: c
-        for c in db.query(DiscoveryCandidate).all()
+        for c in db.query(DiscoveryCandidate).filter(DiscoveryCandidate.user_id == user_id).all()
     }
 
     generated = len(all_seeds)
@@ -113,6 +118,7 @@ def refresh_candidates(db: Session) -> dict[str, Any]:
         if cand is None:
             cand = DiscoveryCandidate(
                 ol_work_key=wk,
+                user_id=user_id,
                 created_at=datetime.utcnow(),
                 status="new",
             )
@@ -153,7 +159,11 @@ def refresh_candidates(db: Session) -> dict[str, Any]:
 
     top_score = (
         db.query(DiscoveryCandidate)
-        .filter(DiscoveryCandidate.status == "new", DiscoveryCandidate.score != None)
+        .filter(
+            DiscoveryCandidate.user_id == user_id,
+            DiscoveryCandidate.status == "new",
+            DiscoveryCandidate.score != None,
+        )
         .order_by(DiscoveryCandidate.score.desc())
         .first()
     )

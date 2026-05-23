@@ -20,28 +20,32 @@ def candidates(
     profile: dict,
     known_work_keys: set[str],
     known_titles: set[str],
+    user_id: int | None = None,
 ) -> list[dict]:
     """Return candidate seeds sourced from beloved authors' bibliographies."""
     author_avgs: dict[str, float] = profile.get("author_user_avg", {})
 
     # Also check raw counts so we can enforce MIN_READ_COUNT.
-    # profile doesn't store counts, so pull from the by_author data indirectly:
-    # we stored author_user_avg only for authors with >= min_data reads (default 3),
-    # but here we want >= 2. Query DB directly.
-    from db.models import Book
+    from db.models import Book, UserBook
     from collections import defaultdict
     import statistics
 
-    read_books = db.query(Book).filter(
-        Book.exclusive_shelf == "read",
-        Book.my_rating != None,
-        Book.my_rating > 0,
-        Book.author != None,
-    ).all()
+    pairs = (
+        db.query(UserBook, Book)
+        .join(Book, UserBook.book_id == Book.id)
+        .filter(
+            UserBook.user_id == user_id,
+            UserBook.exclusive_shelf == "read",
+            UserBook.my_rating != None,
+            UserBook.my_rating > 0,
+            Book.author != None,
+        )
+        .all()
+    )
 
     by_author: dict[str, list[float]] = defaultdict(list)
-    for b in read_books:
-        by_author[b.author].append(b.my_rating)
+    for ub, b in pairs:
+        by_author[b.author].append(ub.my_rating)
 
     loved_authors = [
         a for a, rs in by_author.items()

@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from db.models import Book
+from db.models import Book, UserBook
 from ingest.series import SERIES_RE, parse_series as _parse_series_shared
 
 # Score is a predicted 1-5 rating. Base is your genre baseline, then nudged by
@@ -32,6 +32,28 @@ GLOBAL_MEAN = 3.5      # neutral baseline when we have no genre data
 SUBJECT_MIN_SUPPORT = 5  # subject must appear in N+ rated books to count
 SUBJECT_MIN_OVERLAP = 3  # candidate must share N+ trustworthy subjects
 
+class _Merge:
+    """Lightweight union of UserBook + Book for profile building."""
+    __slots__ = ("id", "my_rating", "exclusive_shelf", "author", "genre",
+                 "ol_avg_rating", "ol_ratings_count", "subjects_json", "title", "series_name")
+
+    def __init__(self, ub: UserBook, b: Book):
+        self.id = b.id
+        self.my_rating = ub.my_rating
+        self.exclusive_shelf = ub.exclusive_shelf
+        self.author = b.author
+        self.genre = b.genre
+        self.ol_avg_rating = b.ol_avg_rating
+        self.ol_ratings_count = b.ol_ratings_count
+        self.subjects_json = b.subjects_json
+        self.title = b.title
+        self.series_name = b.series_name
+
+
+def _merge(ub: UserBook, b: Book) -> _Merge:
+    return _Merge(ub, b)
+
+
 def _series_info(title: str) -> tuple[str | None, int | None]:
     """Extract (series_name_lower, book_number) from a title, or (None, None)."""
     name, pos = _parse_series_shared(title)
@@ -40,14 +62,21 @@ def _series_info(title: str) -> tuple[str | None, int | None]:
     return name.lower(), pos
 
 
-def _build_profile(db: Session, min_data: int = 3, read: list[Book] | None = None) -> dict[str, Any]:
+def _build_profile(db: Session, user_id: int, min_data: int = 3, read: list | None = None) -> dict[str, Any]:
     """Compute the user profile from rated, read books."""
     if read is None:
-        read = db.query(Book).filter(
-            Book.exclusive_shelf == "read",
-            Book.my_rating != None,
-            Book.my_rating > 0,
-        ).all()
+        pairs = (
+            db.query(UserBook, Book)
+            .join(Book, UserBook.book_id == Book.id)
+            .filter(
+                UserBook.user_id == user_id,
+                UserBook.exclusive_shelf == "read",
+                UserBook.my_rating != None,
+                UserBook.my_rating > 0,
+            )
+            .all()
+        )
+        read = [_merge(ub, b) for ub, b in pairs]
 
     # Per-genre stats (your avg, OL avg, OL stdev)
     by_genre: dict[str, list[Book]] = defaultdict(list)
@@ -109,9 +138,9 @@ def _build_profile(db: Session, min_data: int = 3, read: list[Book] | None = Non
     }
     subject_support = {s: len(subject_ratings[s]) for s in subject_affinity}
 
-    # Global popularity baseline
-    counts = [b.ol_ratings_count for b in db.query(Book).all()
-              if b.ol_ratings_count and b.ol_ratings_count > 0]
+    # Global popularity baseline (catalog-wide, user-independent)
+    counts = [row[0] for row in db.query(Book.ol_ratings_count).all()
+              if row[0] and row[0] > 0]
     median_count = statistics.median(counts) if counts else 50
 
     return {
@@ -298,15 +327,21 @@ def _reason(book: Book, scoring: dict[str, Any]) -> str:
     return " · ".join(parts)
 
 
-def compute_recommendations(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
+def compute_recommendations(db: Session, *, user_id: int, limit: int = 50) -> list[dict[str, Any]]:
     """Return ranked to-read books with predicted scores and explanations."""
     from cf.predict import load_predictor as load_cf
     from cf.text_features import load_predictor as load_text
-    profile = _build_profile(db)
-    cf = load_cf(db)
-    text = load_text(db)
+    profile = _build_profile(db, user_id=user_id)
+    cf = load_cf(db, user_id=user_id)
+    text = load_text(db, user_id=user_id)
 
-    to_read = db.query(Book).filter(Book.exclusive_shelf == "to-read").all()
+    to_read_pairs = (
+        db.query(UserBook, Book)
+        .join(Book, UserBook.book_id == Book.id)
+        .filter(UserBook.user_id == user_id, UserBook.exclusive_shelf == "to-read")
+        .all()
+    )
+    to_read = [b for _, b in to_read_pairs]
 
     scored = []
     for b in to_read:

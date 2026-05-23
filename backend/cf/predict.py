@@ -4,22 +4,23 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from db.models import Book, BookSimilarity
+from db.models import Book, BookSimilarity, UserBook
 
 K_NEIGHBORS = 20      # use top-K similar books from user's rated library
 MIN_AVG_SIM = 0.15    # require average similarity of used neighbors above this
 MIN_NEIGHBORS = 5     # require at least N neighbors for any prediction
 
 
-def load_predictor(db: Session) -> "Predictor":
+def load_predictor(db: Session, user_id: int) -> "Predictor":
     """Load similarity edges and user ratings into memory once."""
     user_ratings: dict[int, float] = {}
-    for b in db.query(Book).filter(
-        Book.exclusive_shelf == "read",
-        Book.my_rating != None,
-        Book.my_rating > 0,
+    for ub in db.query(UserBook).filter(
+        UserBook.user_id == user_id,
+        UserBook.exclusive_shelf == "read",
+        UserBook.my_rating != None,
+        UserBook.my_rating > 0,
     ).all():
-        user_ratings[b.id] = float(b.my_rating)
+        user_ratings[ub.book_id] = float(ub.my_rating)
 
     sim_edges: dict[int, list[tuple[float, int]]] = {}  # book_id → [(sim, neighbor_id), ...]
     for s in db.query(BookSimilarity.book_a_id, BookSimilarity.book_b_id, BookSimilarity.similarity).all():

@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - /data/shelflife:/data
+    environment:
+      - DATABASE_URL=/data/shelflife.db
+      - SHELFLIFE_SECRET_KEY=${SHELFLIFE_SECRET_KEY}
+      - SHELFLIFE_BOOTSTRAP_EMAIL=${SHELFLIFE_BOOTSTRAP_EMAIL}
+      - SHELFLIFE_BOOTSTRAP_PASSWORD=${SHELFLIFE_BOOTSTRAP_PASSWORD}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:8000:8000"

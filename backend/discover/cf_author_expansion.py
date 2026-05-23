@@ -18,7 +18,7 @@ from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
-from db.models import Book, BookSimilarity
+from db.models import Book, BookSimilarity, UserBook
 from . import ol_search
 
 MIN_RATING       = 4.0   # anchor = read book rated this or above
@@ -33,6 +33,7 @@ def candidates(
     profile: dict,
     known_work_keys: set[str],
     known_titles: set[str],
+    user_id: int | None = None,
 ) -> list[dict]:
     """Return candidate seeds sourced from CF-similar authors the user hasn't read."""
     import re
@@ -43,24 +44,36 @@ def candidates(
     # ------------------------------------------------------------------
     # 1. Anchor books: user's highly-rated reads
     # ------------------------------------------------------------------
-    anchor_books = db.query(Book).filter(
-        Book.exclusive_shelf == "read",
-        Book.my_rating >= MIN_RATING,
-        Book.author.isnot(None),
-    ).all()
+    anchor_pairs = (
+        db.query(UserBook, Book)
+        .join(Book, UserBook.book_id == Book.id)
+        .filter(
+            UserBook.user_id == user_id,
+            UserBook.exclusive_shelf == "read",
+            UserBook.my_rating >= MIN_RATING,
+            Book.author.isnot(None),
+        )
+        .all()
+    )
 
-    if not anchor_books:
+    if not anchor_pairs:
         return []
 
-    anchor_ids: dict[int, float] = {b.id: float(b.my_rating) for b in anchor_books}
-    anchor_titles: dict[int, str] = {b.id: b.title for b in anchor_books}
+    anchor_ids: dict[int, float] = {b.id: float(ub.my_rating) for ub, b in anchor_pairs}
+    anchor_titles: dict[int, str] = {b.id: b.title for _, b in anchor_pairs}
 
     # ------------------------------------------------------------------
     # 2. All authors the user has ever shelved (any shelf) — exclude these
     # ------------------------------------------------------------------
     all_known_authors: set[str] = {
-        row[0]
-        for row in db.query(Book.author).filter(Book.author.isnot(None)).distinct()
+        b.author
+        for _, b in (
+            db.query(UserBook, Book)
+            .join(Book, UserBook.book_id == Book.id)
+            .filter(UserBook.user_id == user_id, Book.author.isnot(None))
+            .all()
+        )
+        if b.author
     }
 
     # ------------------------------------------------------------------

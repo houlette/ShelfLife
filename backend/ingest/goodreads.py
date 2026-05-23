@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from db.models import Book
+from db.models import Book, UserBook
 from ingest.series import parse_series
 
 
@@ -47,21 +47,30 @@ def _safe_float(s: str) -> float | None:
         return None
 
 
-def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
+def ingest_csv(content: str | bytes, db: Session, user_id: int) -> dict[str, Any]:
     if isinstance(content, bytes):
         content = content.decode("utf-8-sig")
 
     reader = csv.DictReader(io.StringIO(content))
     rows = list(reader)
 
-    existing_ids = {row[0] for row in db.query(Book.goodreads_book_id).all()}
+    # Existing book catalog IDs (for insert/update counting)
+    existing_book_ids = {row[0] for row in db.query(Book.goodreads_book_id).all()}
+    # Existing UserBook pairs for this user
+    existing_ub = {
+        row[0]
+        for row in db.query(Book.goodreads_book_id)
+        .join(UserBook, UserBook.book_id == Book.id)
+        .filter(UserBook.user_id == user_id)
+        .all()
+    }
 
-    # Fields that should never regress on re-import:
-    # - date_added: historical fact, preserve the original Goodreads add date
-    # - my_review / private_notes when None: don't overwrite existing user content
-    #   with an empty export (Goodreads sometimes omits review text on re-export)
-    NEVER_OVERWRITE = {"goodreads_book_id", "date_added"}
-    PRESERVE_IF_NULL = {"my_review", "private_notes"}
+    # Catalog fields never overwrite on re-import
+    CATALOG_NEVER_OVERWRITE = {"goodreads_book_id"}
+    # User fields that shouldn't regress: date_added (historical fact)
+    USER_NEVER_OVERWRITE = {"date_added"}
+    # User fields preserved when null (don't blank out existing content)
+    USER_PRESERVE_IF_NULL = {"my_review"}
 
     inserted = 0
     updated = 0
@@ -80,10 +89,10 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
 
         bookshelves_raw = row.get("Bookshelves", "").strip()
         bookshelves = bookshelves_raw if bookshelves_raw else None
-
         series_name, series_position = parse_series(title)
 
-        entry = {
+        # ── 1. Upsert shared Book catalog ──────────────────────────────────
+        catalog = {
             "goodreads_book_id": book_id,
             "title": title,
             "author": row.get("Author", "").strip() or None,
@@ -91,40 +100,61 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
             "additional_authors": row.get("Additional Authors", "").strip() or None,
             "isbn": _clean_isbn(row.get("ISBN", "")),
             "isbn13": _clean_isbn(row.get("ISBN13", "")),
-            "my_rating": _safe_int(row.get("My Rating", "0")) or 0,
             "average_rating": _safe_float(row.get("Average Rating", "")),
             "publisher": row.get("Publisher", "").strip() or None,
             "binding": row.get("Binding", "").strip() or None,
             "num_pages": _safe_int(row.get("Number of Pages", "")),
             "year_published": _safe_int(row.get("Year Published", "")),
             "original_pub_year": _safe_int(row.get("Original Publication Year", "")),
+            "series_name": series_name,
+            "series_position": series_position,
+        }
+        cat_stmt = (
+            sqlite_insert(Book)
+            .values(**catalog)
+            .on_conflict_do_update(
+                index_elements=["goodreads_book_id"],
+                set_={k: v for k, v in catalog.items() if k not in CATALOG_NEVER_OVERWRITE},
+            )
+        )
+        db.execute(cat_stmt)
+
+        # ── 2. Get the Book.id for the row we just upserted ───────────────
+        book = db.query(Book).filter(Book.goodreads_book_id == book_id).first()
+        if not book:
+            errors.append(f"Failed to locate book {book_id} after upsert")
+            continue
+
+        # ── 3. Upsert per-user UserBook ────────────────────────────────────
+        user_entry = {
+            "user_id": user_id,
+            "book_id": book.id,
+            "my_rating": _safe_int(row.get("My Rating", "0")) or 0,
             "date_read": _parse_date(row.get("Date Read", "")),
             "date_added": _parse_date(row.get("Date Added", "")),
             "exclusive_shelf": row.get("Exclusive Shelf", "").strip() or None,
             "bookshelves": bookshelves,
             "my_review": row.get("My Review", "").strip() or None,
-            "private_notes": row.get("Private Notes", "").strip() or None,
             "read_count": _safe_int(row.get("Read Count", "1")) or 1,
-            "owned_copies": _safe_int(row.get("Owned Copies", "0")) or 0,
-            "series_name": series_name,
-            "series_position": series_position,
+            "year_acquired": None,  # comes from booklist, not Goodreads CSV
         }
-
-        stmt = (
-            sqlite_insert(Book)
-            .values(**entry)
+        ub_update = {
+            k: v for k, v in user_entry.items()
+            if k not in USER_NEVER_OVERWRITE
+            and not (k in USER_PRESERVE_IF_NULL and v is None)
+            and k not in {"user_id", "book_id"}
+        }
+        ub_stmt = (
+            sqlite_insert(UserBook)
+            .values(**user_entry)
             .on_conflict_do_update(
-                index_elements=["goodreads_book_id"],
-                set_={
-                    k: v for k, v in entry.items()
-                    if k not in NEVER_OVERWRITE
-                    and not (k in PRESERVE_IF_NULL and v is None)
-                },
+                index_elements=["user_id", "book_id"],
+                set_=ub_update,
             )
         )
-        db.execute(stmt)
+        db.execute(ub_stmt)
 
-        if book_id in existing_ids:
+        if book_id in existing_ub:
             updated += 1
         else:
             inserted += 1
