@@ -419,11 +419,17 @@ def diversity_enrich_status(db: Session = Depends(get_db)):
     }
 
 
+@router.post("/reclassify")
+def reclassify(db: Session = Depends(get_db)):
+    """Re-run genre classification on stored subjects without re-fetching from OL."""
+    return ol.reclassify_all(db)
+
+
 # ---------------------------------------------------------------------------
 # Series enrichment background task
 # ---------------------------------------------------------------------------
 
-_series_lock  = threading.Lock()
+_series_lock = threading.Lock()
 _series_state: dict = {
     "running":   False,
     "processed": 0,
@@ -434,30 +440,29 @@ _series_state: dict = {
 
 def _run_series_enrich_bg() -> None:
     from datetime import timedelta
-    from sqlalchemy import distinct
     from db.database import SessionLocal
+    import ingest.wikidata as wd
 
     db = SessionLocal()
     try:
-        # Distinct series names from owned books, with their most common author
-        rows = (
-            db.query(Book.series_name, Book.author)
+        # Collect all series names; also grab ol_work_key for the OL fallback
+        all_rows = (
+            db.query(Book.series_name, Book.ol_work_key)
             .filter(Book.series_name.isnot(None))
             .all()
         )
-        # Build (series_name -> author) map — first author encountered per series
+        # series_name → first ol_work_key found (may be None)
         seen: dict[str, str | None] = {}
-        for name, author in rows:
+        for name, wk in all_rows:
             if name and name not in seen:
-                seen[name] = author
+                seen[name] = wk
 
         stale_cutoff = datetime.utcnow() - timedelta(days=7)
 
         with _series_lock:
             _series_state.update({"running": True, "total": len(seen), "processed": 0, "current": None})
 
-        for series_name, author in seen.items():
-            # Check if already fetched recently
+        for series_name, ol_work_key in seen.items():
             existing = (
                 db.query(SeriesCatalog)
                 .filter(SeriesCatalog.series_key == series_name.lower())
@@ -471,15 +476,18 @@ def _run_series_enrich_bg() -> None:
             with _series_lock:
                 _series_state["current"] = series_name
 
-            entries = ol.fetch_series_catalog(series_name, author)
+            # Primary: Wikidata (P179 part-of-series + P1545 series ordinal)
+            entries = wd.fetch_series_catalog(series_name)
+
+            # Fallback: OL work/series/seeds chain if Wikidata returned nothing
+            if not entries and ol_work_key:
+                _, entries = ol.fetch_series_catalog(series_name, ol_work_key)
             now = datetime.utcnow()
 
-            # Always delete and re-insert so fetched_at is updated even when OL
-            # returns no parseable results — this marks the series as "attempted"
-            # so the UI stops showing "fetch for full list".
             db.query(SeriesCatalog).filter(
                 SeriesCatalog.series_key == series_name.lower()
             ).delete()
+
             if entries:
                 for e in entries:
                     db.add(SeriesCatalog(
@@ -487,14 +495,11 @@ def _run_series_enrich_bg() -> None:
                         display_name=series_name,
                         position=e["position"],
                         title=e["title"],
-                        author=e["author"],
                         ol_work_key=e["ol_work_key"],
                         cover_url=e["cover_url"],
                         fetched_at=now,
                     ))
             else:
-                # Sentinel row — marks the series as fetched even if OL returned
-                # no titles with parseable position numbers.
                 db.add(SeriesCatalog(
                     series_key=series_name.lower(),
                     display_name=series_name,
@@ -506,7 +511,7 @@ def _run_series_enrich_bg() -> None:
                 _series_state["processed"] += 1
 
             import time as _time
-            _time.sleep(0.2)  # ~5 req/sec
+            _time.sleep(0.2)
 
         with _series_lock:
             _series_state.update({"running": False, "current": None})
@@ -519,8 +524,8 @@ def _run_series_enrich_bg() -> None:
 
 @router.post("/enrich-series")
 def enrich_series():
-    """Start a background task that fetches the complete book list for each series
-    from Open Library and caches it in series_catalog."""
+    """Start a background task that fetches the complete book list for each
+    series from Open Library and caches it in series_catalog."""
     with _series_lock:
         if _series_state["running"]:
             return {"status": "already_running"}
@@ -533,12 +538,6 @@ def enrich_series():
 def series_enrich_status():
     with _series_lock:
         return dict(_series_state)
-
-
-@router.post("/reclassify")
-def reclassify(db: Session = Depends(get_db)):
-    """Re-run genre classification on stored subjects without re-fetching from OL."""
-    return ol.reclassify_all(db)
 
 
 @router.post("/cf-rebuild")

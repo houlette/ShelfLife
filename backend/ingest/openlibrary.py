@@ -358,55 +358,111 @@ def enrich_all(db: Session, only_unenriched: bool = True, limit: int | None = No
     }
 
 
-_SERIES_FIELDS = "key,title,author_name,cover_i,first_publish_year"
+# ─── Series catalog enrichment ────────────────────────────────────────────────
+
+_OL_BASE = "https://openlibrary.org"
 
 
-def fetch_series_catalog(series_name: str, author: str | None) -> list[dict[str, Any]]:
-    """Query Open Library for all known books in a series.
+def _normalize_series_name(name: str) -> str:
+    return re.sub(r"^the\s+", "", name.strip().lower())
 
-    Uses OL's series search field.  Results are filtered to entries where our
-    regex can extract a matching series name and a numeric position so the
-    caller doesn't have to handle unparseable titles.
 
-    Returns a list of dicts sorted by position:
-        {"position", "title", "author", "ol_work_key", "cover_url"}
+def fetch_series_catalog(
+    series_name: str,
+    ol_work_key: str,
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Fetch all works in a series using OL's work/series/seeds APIs.
+
+    Bootstraps from an owned book's ``ol_work_key``, walks to the OL series
+    key, then fetches every seed work to collect title, cover, and position.
+
+    Returns ``(ol_series_key, entries)`` where each entry is:
+        {"position": int, "title": str, "ol_work_key": str, "cover_url": str|None}
+    Returns ``(None, [])`` on any failure.
     """
-    from ingest.series import parse_series, SERIES_RE
-
     try:
-        r = requests.get(
-            OL_SEARCH,
-            params={"q": f'series:"{series_name}"', "fields": _SERIES_FIELDS, "limit": 50},
-            timeout=10,
+        # ── Step 1: work JSON → OL series key ────────────────────────────────
+        wr = requests.get(f"{_OL_BASE}{ol_work_key}.json", timeout=10)
+        wr.raise_for_status()
+        series_entries = wr.json().get("series", [])
+        if not series_entries:
+            return None, []
+
+        target = _normalize_series_name(series_name)
+        ol_series_key: str | None = None
+
+        if len(series_entries) == 1:
+            ol_series_key = series_entries[0]["series"]["key"]
+        else:
+            # Multiple series on this work — pick the best name match.
+            for se in series_entries:
+                sk = se.get("series", {}).get("key", "")
+                if not sk:
+                    continue
+                time.sleep(0.2)
+                sr = requests.get(f"{_OL_BASE}{sk}.json", timeout=10)
+                if sr.ok:
+                    ol_name = sr.json().get("name", "")
+                    if _normalize_series_name(ol_name) == target:
+                        ol_series_key = sk
+                        break
+            if not ol_series_key:
+                ol_series_key = series_entries[0]["series"]["key"]
+
+        # ── Step 2: seeds → work list ─────────────────────────────────────────
+        time.sleep(0.2)
+        seeds_r = requests.get(
+            f"{_OL_BASE}{ol_series_key}/seeds.json?limit=200", timeout=10
         )
-        r.raise_for_status()
-        docs = r.json().get("docs", [])
+        seeds_r.raise_for_status()
+        seeds = [
+            e for e in seeds_r.json().get("entries", []) if e.get("type") == "work"
+        ]
+
+        # ── Step 3: per-seed work JSON → position ─────────────────────────────
+        results: list[dict[str, Any]] = []
+        for seed in seeds:
+            work_url: str = seed["url"]
+            title: str = seed.get("title", "")
+            picture = seed.get("picture") or {}
+            cover_url: str | None = None
+            if picture.get("url"):
+                cover_url = "https:" + picture["url"].replace("-S.jpg", "-M.jpg")
+
+            time.sleep(0.2)
+            wk_r = requests.get(f"{_OL_BASE}{work_url}.json", timeout=10)
+            if not wk_r.ok:
+                continue
+
+            pos: int | None = None
+            for se in wk_r.json().get("series", []):
+                raw = se.get("position")
+                if raw is not None:
+                    try:
+                        f = float(str(raw))
+                        if f == int(f):
+                            pos = int(f)
+                            break
+                    except (ValueError, TypeError):
+                        pass  # "Prequel", "0.5", etc. — skip
+
+            if pos is not None:
+                results.append({
+                    "position":    pos,
+                    "title":       title,
+                    "ol_work_key": work_url,
+                    "cover_url":   cover_url,
+                })
+
+        # Deduplicate by position (keep first occurrence)
+        seen: set[int] = set()
+        unique: list[dict[str, Any]] = []
+        for r in sorted(results, key=lambda x: x["position"]):
+            if r["position"] not in seen:
+                seen.add(r["position"])
+                unique.append(r)
+
+        return ol_series_key, unique
+
     except Exception:
-        return []
-
-    series_key = series_name.lower()
-    results = []
-    for doc in docs:
-        title = doc.get("title", "")
-        name, pos = parse_series(title)
-        if pos is None:
-            continue
-        if name and name.lower() != series_key:
-            continue  # OL returned a different series
-        cover_i = doc.get("cover_i")
-        results.append({
-            "position": pos,
-            "title": title,
-            "author": (doc.get("author_name") or [None])[0],
-            "ol_work_key": doc.get("key"),
-            "cover_url": f"{COVER_BASE}/{cover_i}-M.jpg" if cover_i else None,
-        })
-
-    # Deduplicate by position — keep the first occurrence (OL may return duplicates)
-    seen: set[int] = set()
-    unique = []
-    for r in sorted(results, key=lambda x: x["position"]):
-        if r["position"] not in seen:
-            seen.add(r["position"])
-            unique.append(r)
-    return unique
+        return None, []
