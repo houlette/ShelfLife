@@ -178,7 +178,7 @@ async def upload_booklist(
         raise HTTPException(400, "Expected a .csv file")
     content = await file.read()
     try:
-        result = booklist_ingest.ingest_csv(content, db)
+        result = booklist_ingest.ingest_csv(content, db, user_id=current_user.id)
         _log(db, "booklist", file.filename, result, user_id=current_user.id)
         return result
     except Exception as e:
@@ -228,6 +228,33 @@ def booklist_pending(
     return result
 
 
+def _upsert_user_book(db: Session, user_id: int, book_id: int, entry: "BooklistPending") -> None:
+    """Create a UserBook row for a booklist entry if one doesn't already exist."""
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    from ingest.booklist import _map_shelf
+    shelf = _map_shelf(entry.read_flag or "")
+    bookshelves = None
+    if entry.category:
+        bookshelves = (
+            f"{entry.category}, {entry.subcategory}"
+            if entry.subcategory else entry.category
+        )
+    stmt = (
+        sqlite_insert(UserBook)
+        .values(
+            user_id=user_id,
+            book_id=book_id,
+            exclusive_shelf=shelf,
+            my_rating=0,
+            bookshelves=bookshelves,
+            read_count=1 if (entry.read_flag or "").lower() == "yes" else 0,
+            year_acquired=entry.year_acquired,
+        )
+        .on_conflict_do_nothing(index_elements=["user_id", "book_id"])
+    )
+    db.execute(stmt)
+
+
 @router.post("/booklist/pending/{pending_id}/resolve")
 def resolve_pending(
     pending_id: int,
@@ -257,6 +284,8 @@ def resolve_pending(
         if entry.year_acquired is not None:
             book.year_acquired = entry.year_acquired
         entry.status = "merged"
+        # Ensure this user has a UserBook row for the merged book
+        _upsert_user_book(db, current_user.id, book.id, entry)
 
     elif action == "insert":
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -270,6 +299,12 @@ def resolve_pending(
             )
         )
         db.execute(stmt)
+        db.flush()
+        book = db.query(Book).filter(
+            Book.goodreads_book_id == book_entry["goodreads_book_id"]
+        ).first()
+        if book:
+            _upsert_user_book(db, current_user.id, book.id, entry)
         entry.status = "inserted"
 
     elif action == "dismiss":
