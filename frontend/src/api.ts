@@ -101,7 +101,11 @@ export const api = {
   seriesEnrichStatus: () => get<{ running: boolean; processed: number; total: number; current: string | null }>('/ingest/series-enrich/status'),
 
   cfStatus: () => get<{ ratings_loaded: number; books_covered: number; similarity_pairs: number }>('/ingest/cf-status'),
-  cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST', headers: authHeaders() }).then(r => r.json()),
+  cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST', headers: authHeaders() }).then(async r => {
+    const body = await r.json()
+    if (!r.ok) throw new Error((body as { detail?: string }).detail || `${r.status} ${r.statusText}`)
+    return body as { ingest: { resolved_rows: number }; similarity: { pairs_stored: number; books_covered: number } }
+  }),
 
   discover: {
     list: (source?: string) =>
