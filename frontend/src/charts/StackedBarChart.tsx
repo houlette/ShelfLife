@@ -55,7 +55,7 @@ export function StackedBarChart({ data, height = 200, percent = true }: Props) {
   const MIN_LABEL_GAP = 28
   const visibleLabelIdx = new Set<number>()
   let lastLabelX = -Infinity
-  data.forEach((d, i) => {
+  data.forEach((_d, i) => {
     const cx = padL + i * (barW + barGap) + barW / 2
     if (cx - lastLabelX >= MIN_LABEL_GAP) {
       visibleLabelIdx.add(i)

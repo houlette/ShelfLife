@@ -133,6 +133,7 @@ class DiscoveryCandidate(Base):
     __tablename__ = "discovery_candidates"
 
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ol_work_key = Column(String(50), unique=True, nullable=False)
     title = Column(Text, nullable=False)
     author = Column(String(255))
@@ -180,6 +181,7 @@ class BooklistPending(Base):
     candidate_book_ids = Column(Text)  # JSON list of Book.id to compare against
     status = Column(String(20), default="pending")  # "pending" (others reserved)
     created_at = Column(DateTime)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 class SeriesCatalog(Base):
@@ -208,3 +210,4 @@ class IngestLog(Base):
     ingested_at = Column(DateTime, nullable=False)
     status = Column(String(20))
     message = Column(Text)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
