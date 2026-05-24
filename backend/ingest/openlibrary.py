@@ -367,6 +367,42 @@ def _normalize_series_name(name: str) -> str:
     return re.sub(r"^the\s+", "", name.strip().lower())
 
 
+def _author_keys(work_json: dict) -> set[str]:
+    """Extract the set of /authors/OL…A keys from a work JSON blob."""
+    keys: set[str] = set()
+    for entry in work_json.get("authors", []):
+        # Two shapes: {"author": {"key": "…"}} and {"key": "…"}
+        key = (entry.get("author") or entry).get("key", "")
+        if key:
+            keys.add(key)
+    return keys
+
+
+def _is_latin_script(title: str) -> bool:
+    """Return False if the title is primarily written in a non-Latin script.
+
+    Catches Cyrillic, CJK, Arabic, Hebrew, etc. without extra API calls.
+    Allows accented Latin characters (French, German, Spanish, etc.).
+    """
+    import unicodedata
+    non_latin = 0
+    letters = 0
+    for ch in title:
+        if not ch.isalpha():
+            continue
+        letters += 1
+        name = unicodedata.name(ch, "")
+        if any(script in name for script in (
+            "CYRILLIC", "ARABIC", "HEBREW", "CJK", "HIRAGANA",
+            "KATAKANA", "HANGUL", "THAI", "GEORGIAN", "ARMENIAN",
+            "GREEK",  # Modern Greek foreign editions
+        )):
+            non_latin += 1
+    if letters == 0:
+        return True
+    return (non_latin / letters) < 0.15
+
+
 def fetch_series_catalog(
     series_name: str,
     ol_work_key: str,
@@ -409,6 +445,9 @@ def fetch_series_catalog(
             if not ol_series_key:
                 ol_series_key = series_entries[0]["series"]["key"]
 
+        # Capture anchor book's authors for filtering in Step 3
+        anchor_authors = _author_keys(wr.json())
+
         # ── Step 2: seeds → work list ─────────────────────────────────────────
         time.sleep(0.2)
         seeds_r = requests.get(
@@ -424,6 +463,11 @@ def fetch_series_catalog(
         for seed in seeds:
             work_url: str = seed["url"]
             title: str = seed.get("title", "")
+
+            # Fast filter: skip non-Latin-script titles (Cyrillic, CJK, etc.)
+            if not _is_latin_script(title):
+                continue
+
             picture = seed.get("picture") or {}
             cover_url: str | None = None
             if picture.get("url"):
@@ -434,8 +478,17 @@ def fetch_series_catalog(
             if not wk_r.ok:
                 continue
 
+            wk_json = wk_r.json()
+
+            # Author filter: skip works with no author overlap with the anchor
+            # book (catches companion volumes by different/additional authors).
+            if anchor_authors:
+                seed_authors = _author_keys(wk_json)
+                if seed_authors and not (anchor_authors & seed_authors):
+                    continue
+
             pos: int | None = None
-            for se in wk_r.json().get("series", []):
+            for se in wk_json.get("series", []):
                 raw = se.get("position")
                 if raw is not None:
                     try:
