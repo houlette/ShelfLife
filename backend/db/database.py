@@ -48,6 +48,7 @@ _MIGRATIONS = [
     ("discovery_candidates", "user_id INTEGER REFERENCES users(id)"),
     ("booklist_pending", "user_id INTEGER REFERENCES users(id)"),
     ("ingest_log", "user_id INTEGER REFERENCES users(id)"),
+    ("series_catalog", "manually_curated BOOLEAN DEFAULT FALSE"),
 ]
 
 _INDEXES = [

@@ -196,7 +196,8 @@ class SeriesCatalog(Base):
     author       = Column(String(255))
     ol_work_key  = Column(String(50))
     cover_url    = Column(Text)
-    fetched_at   = Column(DateTime)      # same timestamp for all rows in a series
+    fetched_at        = Column(DateTime)   # same timestamp for all rows in a series
+    manually_curated  = Column(Boolean, default=False)
 
 
 class IngestLog(Base):

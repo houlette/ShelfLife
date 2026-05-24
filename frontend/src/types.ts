@@ -46,6 +46,7 @@ export interface SeriesEntry {
   cover_url: string | null
   book_id: number | null
   owned: boolean
+  has_catalog_row: boolean
 }
 
 export interface SeriesStat {
@@ -53,6 +54,7 @@ export interface SeriesStat {
   key: string
   author: string | null
   catalog_fetched: boolean
+  curated: boolean
   entries: SeriesEntry[]
 }
 

@@ -58,11 +58,230 @@ function PositionPip({ entry }: { entry: SeriesEntry }) {
   )
 }
 
-function SeriesCard({ series }: { series: SeriesStat }) {
+// ── Edit-mode entry row ───────────────────────────────────────────────────────
+
+interface DraftEntry {
+  position: number
+  title: string
+  has_catalog_row: boolean
+  owned: boolean
+  shelf: string | null
+}
+
+function EditEntryRow({
+  entry,
+  seriesKey,
+  onSaved,
+  onDeleted,
+}: {
+  entry: DraftEntry
+  seriesKey: string
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const [pos, setPos] = useState(String(entry.position))
+  const [title, setTitle] = useState(entry.title)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const dirty = pos !== String(entry.position) || title !== entry.title
+
+  async function save() {
+    if (!dirty) return
+    setSaving(true)
+    setError(null)
+    try {
+      const body: { position?: number; title?: string } = {}
+      const newPos = parseInt(pos)
+      if (!isNaN(newPos) && newPos !== entry.position) body.position = newPos
+      if (title !== entry.title) body.title = title
+      await api.seriesCatalog.updateEntry(seriesKey, entry.position, body)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove() {
+    if (!entry.has_catalog_row) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.seriesCatalog.deleteEntry(seriesKey, entry.position)
+      onDeleted()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* Position input */}
+        <input
+          type="number"
+          value={pos}
+          onChange={e => setPos(e.target.value)}
+          onBlur={save}
+          disabled={saving || !entry.has_catalog_row}
+          style={{
+            width: 42, padding: '3px 5px', fontSize: 12,
+            fontFamily: 'var(--font-mono)',
+            border: '1px solid var(--line)',
+            borderRadius: 3,
+            background: entry.has_catalog_row ? 'var(--paper)' : 'var(--surface)',
+            color: 'var(--ink)',
+            textAlign: 'center',
+          }}
+        />
+        {/* Title input */}
+        <input
+          type="text"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          disabled={saving || !entry.has_catalog_row}
+          placeholder={entry.owned ? '(title from your library)' : 'Title'}
+          style={{
+            flex: 1, padding: '3px 7px', fontSize: 13,
+            border: '1px solid var(--line)',
+            borderRadius: 3,
+            background: entry.has_catalog_row ? 'var(--paper)' : 'var(--surface)',
+            color: 'var(--ink)',
+            fontFamily: 'inherit',
+          }}
+        />
+        {/* Pip showing read status */}
+        <PositionPip entry={{ ...entry, position: parseInt(pos) || entry.position } as SeriesEntry} />
+        {/* Delete button */}
+        {entry.has_catalog_row ? (
+          <button
+            onClick={remove}
+            disabled={saving}
+            title="Remove from catalog"
+            style={{
+              width: 22, height: 22, padding: 0, border: 'none',
+              borderRadius: 3, cursor: saving ? 'default' : 'pointer',
+              background: 'transparent', color: 'var(--muted)',
+              fontSize: 16, lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >×</button>
+        ) : (
+          <div style={{ width: 22 }} title="Owned book — edit series info on the book itself">
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>📚</span>
+          </div>
+        )}
+      </div>
+      {error && <div style={{ fontSize: 11, color: 'var(--accent-2, red)', marginTop: 3, paddingLeft: 52 }}>{error}</div>}
+    </div>
+  )
+}
+
+// ── Add-entry form ────────────────────────────────────────────────────────────
+
+function AddEntryRow({ seriesKey, onAdded }: { seriesKey: string; onAdded: () => void }) {
+  const [pos, setPos] = useState('')
+  const [title, setTitle] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function add() {
+    const posNum = parseInt(pos)
+    if (isNaN(posNum) || !title.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      await api.seriesCatalog.addEntry(seriesKey, { position: posNum, title: title.trim() })
+      setPos('')
+      setTitle('')
+      onAdded()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Add failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          type="number"
+          value={pos}
+          onChange={e => setPos(e.target.value)}
+          placeholder="#"
+          style={{
+            width: 42, padding: '3px 5px', fontSize: 12,
+            fontFamily: 'var(--font-mono)',
+            border: '1px solid var(--line)',
+            borderRadius: 3, textAlign: 'center',
+            background: 'var(--paper)', color: 'var(--ink)',
+          }}
+        />
+        <input
+          type="text"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="Add entry…"
+          style={{
+            flex: 1, padding: '3px 7px', fontSize: 13,
+            border: '1px solid var(--line)',
+            borderRadius: 3,
+            background: 'var(--paper)', color: 'var(--ink)',
+            fontFamily: 'inherit',
+          }}
+        />
+        <button
+          onClick={add}
+          disabled={saving || !pos || !title.trim()}
+          style={{
+            padding: '3px 10px', fontSize: 12, borderRadius: 3,
+            border: '1px solid var(--line)',
+            background: saving ? 'var(--surface)' : 'var(--ink)',
+            color: saving ? 'var(--muted)' : 'var(--paper)',
+            cursor: (saving || !pos || !title.trim()) ? 'default' : 'pointer',
+            fontFamily: 'inherit', whiteSpace: 'nowrap',
+          }}
+        >Add</button>
+      </div>
+      {error && <div style={{ fontSize: 11, color: 'var(--accent-2, red)', marginTop: 3, paddingLeft: 52 }}>{error}</div>}
+    </div>
+  )
+}
+
+// ── Series card ───────────────────────────────────────────────────────────────
+
+function SeriesCard({
+  series,
+  editing,
+  onEditToggle,
+  onRefresh,
+}: {
+  series: SeriesStat
+  editing: boolean
+  onEditToggle: () => void
+  onRefresh: () => void
+}) {
   const status = seriesStatus(series)
   const ownedCount = series.entries.filter(e => e.owned).length
   const readCount = series.entries.filter(e => e.shelf === 'read').length
   const missingCount = series.entries.filter(e => !e.owned).length
+  const [unlocking, setUnlocking] = useState(false)
+
+  async function unlock() {
+    setUnlocking(true)
+    await api.seriesCatalog.unlock(series.key)
+    setUnlocking(false)
+    onRefresh()
+    if (editing) onEditToggle()
+  }
 
   return (
     <div style={{
@@ -85,18 +304,39 @@ function SeriesCard({ series }: { series: SeriesStat }) {
           }}>
             {STATUS_LABELS[status]}
           </span>
-        </div>
-        {/* Counts */}
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div className="mono" style={{ fontSize: 13, color: 'var(--ink)' }}>
-            {readCount}/{ownedCount}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--muted)' }}>read / owned</div>
-          {missingCount > 0 && (
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
-              {missingCount} not owned
-            </div>
+          {series.curated && (
+            <span title="Manually curated — won't be overwritten by re-fetch" style={{ fontSize: 11, color: 'var(--muted)' }}>
+              ✎ curated
+            </span>
           )}
+        </div>
+
+        {/* Counts + edit toggle */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexShrink: 0 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div className="mono" style={{ fontSize: 13, color: 'var(--ink)' }}>
+              {readCount}/{ownedCount}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--muted)' }}>read / owned</div>
+            {missingCount > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+                {missingCount} not owned
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onEditToggle}
+            title={editing ? 'Done editing' : 'Edit series'}
+            style={{
+              padding: '3px 8px', fontSize: 12, borderRadius: 3,
+              border: '1px solid var(--line)',
+              background: editing ? 'var(--ink)' : 'transparent',
+              color: editing ? 'var(--paper)' : 'var(--muted)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {editing ? 'Done' : 'Edit'}
+          </button>
         </div>
       </div>
 
@@ -106,34 +346,75 @@ function SeriesCard({ series }: { series: SeriesStat }) {
         </div>
       )}
 
-      {/* Entry list: pip + title per row */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        {series.entries.map(e => (
-          <div key={e.position} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <PositionPip entry={e} />
-            <span style={{
-              fontSize: 13,
-              color: e.owned ? 'var(--ink)' : 'var(--muted)',
-              fontStyle: e.owned ? 'normal' : 'italic',
-              lineHeight: 1.3,
-            }}>
-              {e.title ?? `Book ${e.position}`}
-            </span>
-          </div>
-        ))}
-        {!series.catalog_fetched && (
+      {/* Entry list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: editing ? 8 : 5 }}>
+        {editing ? (
+          series.entries.map(e => (
+            <EditEntryRow
+              key={e.position}
+              entry={{ position: e.position, title: e.title ?? '', has_catalog_row: e.has_catalog_row, owned: e.owned, shelf: e.shelf }}
+              seriesKey={series.key}
+              onSaved={onRefresh}
+              onDeleted={onRefresh}
+            />
+          ))
+        ) : (
+          series.entries.map(e => (
+            <div key={e.position} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <PositionPip entry={e} />
+              <span style={{
+                fontSize: 13,
+                color: e.owned ? 'var(--ink)' : 'var(--muted)',
+                fontStyle: e.owned ? 'normal' : 'italic',
+                lineHeight: 1.3,
+              }}>
+                {e.title ?? `Book ${e.position}`}
+              </span>
+            </div>
+          ))
+        )}
+
+        {editing && <AddEntryRow seriesKey={series.key} onAdded={onRefresh} />}
+
+        {!series.catalog_fetched && !editing && (
           <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, paddingLeft: 32 }}>
             Fetch series data for the full list
           </div>
         )}
       </div>
+
+      {/* Edit-mode footer actions */}
+      {editing && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-soft)', display: 'flex', gap: 12, alignItems: 'center' }}>
+          {series.curated ? (
+            <button
+              onClick={unlock}
+              disabled={unlocking}
+              style={{
+                fontSize: 11, padding: '3px 10px', borderRadius: 3,
+                border: '1px solid var(--line)',
+                background: 'transparent', color: 'var(--muted)',
+                cursor: unlocking ? 'default' : 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {unlocking ? 'Unlocking…' : 'Unlock & re-fetch from OL'}
+            </button>
+          ) : null}
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Changes save automatically. Edits lock this series against re-fetch.
+          </span>
+        </div>
+      )}
     </div>
   )
 }
 
+// ── View ──────────────────────────────────────────────────────────────────────
+
 export function ViewSeries() {
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [enriching, setEnriching] = useState(false)
+  const [editingKey, setEditingKey] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const { data: allSeries = [], isLoading } = useQuery({
@@ -161,14 +442,17 @@ export function ViewSeries() {
     await api.enrichSeries()
   }
 
-  // Drive enriching flag from polled status so it resets when task finishes
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ['series'] })
+  }
+
   useEffect(() => {
     if (!enrichStatus) return
     if (enrichStatus.running) {
       setEnriching(true)
     } else if (enriching) {
       setEnriching(false)
-      qc.invalidateQueries({ queryKey: ['series'] })
+      refresh()
     }
   }, [enrichStatus])
 
@@ -249,7 +533,15 @@ export function ViewSeries() {
         <div style={{ fontSize: 13, color: 'var(--muted)' }}>No series found.</div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map(s => <SeriesCard key={s.key} series={s} />)}
+          {filtered.map(s => (
+            <SeriesCard
+              key={s.key}
+              series={s}
+              editing={editingKey === s.key}
+              onEditToggle={() => setEditingKey(prev => prev === s.key ? null : s.key)}
+              onRefresh={refresh}
+            />
+          ))}
         </div>
       )}
 
