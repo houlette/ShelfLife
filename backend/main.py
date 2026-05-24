@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from db.database import init_db
-from routers import auth, ingest, insights, metrics
+from routers import auth, ingest, insights, metrics, series
 from routers import discover
 
 app = FastAPI(title="ShelfLife API", version="1.0.0")
@@ -27,6 +27,7 @@ app.include_router(ingest.router)
 app.include_router(metrics.router)
 app.include_router(insights.router)
 app.include_router(discover.router)
+app.include_router(series.router)
 
 
 @app.on_event("startup")

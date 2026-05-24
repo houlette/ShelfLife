@@ -533,6 +533,10 @@ def _run_series_enrich_bg() -> None:
                 .filter(SeriesCatalog.series_key == series_name.lower())
                 .first()
             )
+            if existing and existing.manually_curated:
+                with _series_lock:
+                    _series_state["processed"] += 1
+                continue
             if existing and existing.fetched_at and existing.fetched_at > stale_cutoff:
                 with _series_lock:
                     _series_state["processed"] += 1

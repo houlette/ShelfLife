@@ -100,6 +100,25 @@ export const api = {
   enrichSeries: () => fetch(`${BASE}/ingest/enrich-series`, { method: 'POST', headers: authHeaders() }).then(r => r.json()),
   seriesEnrichStatus: () => get<{ running: boolean; processed: number; total: number; current: string | null }>('/ingest/series-enrich/status'),
 
+  seriesCatalog: {
+    deleteEntry: (key: string, position: number) =>
+      fetch(`${BASE}/series/${encodeURIComponent(key)}/entries/${position}`, { method: 'DELETE', headers: authHeaders() }),
+    updateEntry: (key: string, position: number, body: { position?: number; title?: string }) =>
+      fetch(`${BASE}/series/${encodeURIComponent(key)}/entries/${position}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(body),
+      }).then(r => { if (!r.ok) throw new Error(`Update failed: ${r.status}`); return r.json() }),
+    addEntry: (key: string, body: { position: number; title: string }) =>
+      fetch(`${BASE}/series/${encodeURIComponent(key)}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(body),
+      }).then(r => { if (!r.ok) throw new Error(`Add failed: ${r.status}`); return r.json() }),
+    unlock: (key: string) =>
+      fetch(`${BASE}/series/${encodeURIComponent(key)}/unlock`, { method: 'POST', headers: authHeaders() }),
+  },
+
   cfStatus: () => get<{ ratings_loaded: number; books_covered: number; similarity_pairs: number }>('/ingest/cf-status'),
   cfRebuild: () => fetch(`${BASE}/ingest/cf-rebuild`, { method: 'POST', headers: authHeaders() }).then(async r => {
     const body = await r.json()

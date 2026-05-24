@@ -338,17 +338,20 @@ def get_series(
         if all_positions:
             all_positions = set(range(min(all_positions), max(all_positions) + 1))
 
+        curated = any(r.manually_curated for r in catalog)
+
         entries = []
         for pos in sorted(all_positions):
             owned_book = owned_map.get(pos)
             catalog_row = catalog_map.get(pos)
             entries.append({
-                "position":  pos,
-                "title":     (owned_book.title if owned_book else None) or (catalog_row.title if catalog_row else None),
-                "shelf":     owned_book.exclusive_shelf if owned_book else None,
-                "cover_url": (owned_book.cover_url if owned_book else None) or (catalog_row.cover_url if catalog_row else None),
-                "book_id":   owned_book.id if owned_book else None,
-                "owned":     owned_book is not None,
+                "position":       pos,
+                "title":          (owned_book.title if owned_book else None) or (catalog_row.title if catalog_row else None),
+                "shelf":          owned_book.exclusive_shelf if owned_book else None,
+                "cover_url":      (owned_book.cover_url if owned_book else None) or (catalog_row.cover_url if catalog_row else None),
+                "book_id":        owned_book.id if owned_book else None,
+                "owned":          owned_book is not None,
+                "has_catalog_row": catalog_row is not None,
             })
 
         result.append({
@@ -356,6 +359,7 @@ def get_series(
             "key":             key,
             "author":          author,
             "catalog_fetched": catalog_fetched,
+            "curated":         curated,
             "entries":         entries,
         })
 
