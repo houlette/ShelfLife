@@ -3,7 +3,7 @@ import type { Book } from '../types'
 import { filterBooksByRange, aggregateBooks, nfmt, MONTH_NAMES } from '../utils'
 import type { Range, Granularity } from '../utils'
 import { SectionTitle, Card } from '../components'
-import { BarChart, LineChart, PubYearScatter } from '../charts'
+import { BarChart, LineChart, PubYearScatter, CalendarHeatmap } from '../charts'
 
 interface Props {
   books: Book[]
@@ -11,10 +11,32 @@ interface Props {
   granularity: Granularity
 }
 
+/** Parse a YYYY-MM-DD string in local time to avoid UTC-shift issues on getDay/getMonth. */
+function parseLocal(s: string): Date {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 export function ViewTimeline({ books, range, granularity }: Props) {
   const readBooks = useMemo(() => books.filter(b => b.exclusive_shelf === 'read'), [books])
   const filtered = useMemo(() => filterBooksByRange(readBooks, range), [readBooks, range])
   const periods = useMemo(() => aggregateBooks(filtered, granularity), [filtered, granularity])
+
+  // ── Pattern data (all-time, date_read only) ───────────────────────────────
+  const datedBooks = useMemo(() => readBooks.filter(b => b.date_read), [readBooks])
+
+  const byDayOfWeek = useMemo(() => {
+    const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const counts = new Array(7).fill(0)
+    for (const b of datedBooks) counts[parseLocal(b.date_read!).getDay()]++
+    return DOW.map((label, i) => ({ label, value: counts[i] }))
+  }, [datedBooks])
+
+  const byMonthOfYear = useMemo(() => {
+    const counts = new Array(12).fill(0)
+    for (const b of datedBooks) counts[parseLocal(b.date_read!).getMonth()]++
+    return MONTH_NAMES.map((label, i) => ({ label, value: counts[i] }))
+  }, [datedBooks])
 
   const byPubYear = useMemo(() => {
     const counts: Record<number, number> = {}
@@ -149,6 +171,24 @@ export function ViewTimeline({ books, range, granularity }: Props) {
         </div>
         <PubYearScatter books={readBooks} />
       </Card>
+
+      {/* ── Reading patterns ─────────────────────────────────────────────── */}
+      {datedBooks.length > 0 && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
+            <Card title="Books finished by month" eyebrow="Seasonality · all time" style={{ minWidth: 0 }}>
+              <BarChart data={byMonthOfYear} height={160} color="var(--accent-3)" />
+            </Card>
+            <Card title="Books finished by day of week" eyebrow="Weekly rhythm · all time" style={{ minWidth: 0 }}>
+              <BarChart data={byDayOfWeek} height={160} color="var(--accent-2)" />
+            </Card>
+          </div>
+
+          <Card title="Reading calendar" eyebrow="Books finished · all time" style={{ marginBottom: 48 }}>
+            <CalendarHeatmap books={readBooks} />
+          </Card>
+        </>
+      )}
     </div>
   )
 }
