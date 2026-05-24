@@ -38,8 +38,8 @@ function PositionPip({ entry }: { entry: SeriesEntry }) {
   const borderColor = isOwned ? color : 'var(--line)'
 
   return (
-    <div title={entry.title ?? `Book ${entry.position}`} style={{
-      width: 24, height: 24,
+    <div style={{
+      width: 22, height: 22,
       borderRadius: '50%',
       border: `2px solid ${borderColor}`,
       background: color,
@@ -70,13 +70,10 @@ function SeriesCard({ series }: { series: SeriesStat }) {
       background: 'var(--surface)',
       border: '1px solid var(--line-soft)',
       borderRadius: 4,
-      display: 'grid',
-      gridTemplateColumns: '1fr auto',
-      gap: 12,
-      alignItems: 'start',
     }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: series.author ? 2 : 12 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="serif" style={{ fontSize: 15, color: 'var(--ink)', fontWeight: 500 }}>
             {series.name}
           </span>
@@ -89,34 +86,44 @@ function SeriesCard({ series }: { series: SeriesStat }) {
             {STATUS_LABELS[status]}
           </span>
         </div>
-        {series.author && (
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-            {series.author}
+        {/* Counts */}
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div className="mono" style={{ fontSize: 13, color: 'var(--ink)' }}>
+            {readCount}/{ownedCount}
           </div>
-        )}
-
-        {/* Position pips */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {series.entries.map(e => (
-            <PositionPip key={e.position} entry={e} />
-          ))}
-          {!series.catalog_fetched && (
-            <span style={{ fontSize: 11, color: 'var(--muted)', alignSelf: 'center', marginLeft: 4 }}>
-              fetch for full list
-            </span>
+          <div style={{ fontSize: 10, color: 'var(--muted)' }}>read / owned</div>
+          {missingCount > 0 && (
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+              {missingCount} not owned
+            </div>
           )}
         </div>
       </div>
 
-      {/* Right: counts */}
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div className="mono" style={{ fontSize: 13, color: 'var(--ink)' }}>
-          {readCount}/{ownedCount}
+      {series.author && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
+          {series.author}
         </div>
-        <div style={{ fontSize: 10, color: 'var(--muted)' }}>read / owned</div>
-        {missingCount > 0 && (
-          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
-            {missingCount} not owned
+      )}
+
+      {/* Entry list: pip + title per row */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {series.entries.map(e => (
+          <div key={e.position} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <PositionPip entry={e} />
+            <span style={{
+              fontSize: 13,
+              color: e.owned ? 'var(--ink)' : 'var(--muted)',
+              fontStyle: e.owned ? 'normal' : 'italic',
+              lineHeight: 1.3,
+            }}>
+              {e.title ?? `Book ${e.position}`}
+            </span>
+          </div>
+        ))}
+        {!series.catalog_fetched && (
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, paddingLeft: 32 }}>
+            Fetch series data for the full list
           </div>
         )}
       </div>
