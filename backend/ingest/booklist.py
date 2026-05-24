@@ -29,7 +29,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from db.models import Book, BooklistPending
+from db.models import Book, BooklistPending, UserBook
 
 
 # ── Normalisation helpers ──────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ def _book_entry_from_pending(pending: BooklistPending) -> dict[str, Any]:
 
 # ── Main ingest ────────────────────────────────────────────────────────────────
 
-def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
+def ingest_csv(content: str | bytes, db: Session, user_id: int | None = None) -> dict[str, Any]:
     if isinstance(content, bytes):
         content = content.decode("utf-8-sig")
 
@@ -115,6 +115,16 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
     existing_pending_ids: set[int] = set(
         r for (r,) in db.query(BooklistPending.booklist_index).all()
     )
+    # Booklist-only books (goodreads_book_id < 0) that already have a UserBook row
+    # for this user — used to allow re-import as a backfill mechanism.
+    existing_user_book_ids: set[int] = set()
+    if user_id is not None:
+        existing_user_book_ids = set(
+            b_id for (b_id,) in db.query(Book.booklist_id)
+            .join(UserBook, (UserBook.book_id == Book.id) & (UserBook.user_id == user_id))
+            .filter(Book.booklist_id != None, Book.goodreads_book_id < 0)
+            .all()
+        )
 
     matched = 0
     inserted = 0
@@ -129,8 +139,18 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
                 continue
             idx = int(raw_idx)
 
-            # Skip rows already processed in a previous import (any path)
-            if idx in existing_sheet_ids or idx in existing_pending_ids:
+            # Skip rows already processed in a previous import (any path).
+            # Exception: booklist-only books without a UserBook row are re-processed
+            # so that re-importing acts as a backfill for the current user.
+            already_done = idx in existing_sheet_ids or idx in existing_pending_ids
+            needs_ub_backfill = (
+                already_done
+                and user_id is not None
+                and idx in existing_sheet_ids
+                and idx not in existing_user_book_ids
+                and idx not in existing_pending_ids
+            )
+            if already_done and not needs_ub_backfill:
                 continue
 
             title = row.get("Title", "").strip()
@@ -215,6 +235,24 @@ def ingest_csv(content: str | bytes, db: Session) -> dict[str, Any]:
                     )
                 )
                 db.execute(stmt)
+                # Create UserBook so this book is visible in per-user queries
+                if user_id is not None:
+                    book = db.query(Book).filter(Book.goodreads_book_id == -idx).first()
+                    if book:
+                        ub_stmt = (
+                            sqlite_insert(UserBook)
+                            .values(
+                                user_id=user_id,
+                                book_id=book.id,
+                                exclusive_shelf=_map_shelf(read_flag),
+                                my_rating=0,
+                                bookshelves=bookshelves,
+                                read_count=1 if read_flag.lower() == "yes" else 0,
+                                year_acquired=year_acquired,
+                            )
+                            .on_conflict_do_nothing(index_elements=["user_id", "book_id"])
+                        )
+                        db.execute(ub_stmt)
                 if idx not in existing_sheet_ids:
                     inserted += 1
 
