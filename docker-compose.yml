@@ -1,5 +1,8 @@
 services:
   api:
+    # Fixed name so the shared Caddy (in ~/infra/) can reverse_proxy to
+    # us by container name over the external `web` network.
+    container_name: shelflife-api
     build: .
     restart: unless-stopped
     volumes:
@@ -10,5 +13,13 @@ services:
       - SHELFLIFE_BOOTSTRAP_EMAIL=${SHELFLIFE_BOOTSTRAP_EMAIL}
       - SHELFLIFE_BOOTSTRAP_PASSWORD=${SHELFLIFE_BOOTSTRAP_PASSWORD}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-    ports:
-      - "127.0.0.1:8000:8000"
+    networks:
+      - web
+
+# Shared bridge network with the Caddy container in ~/infra/. Created
+# once outside of compose with `docker network create web` — see the
+# infra repo README.
+networks:
+  web:
+    external: true
+    name: web
