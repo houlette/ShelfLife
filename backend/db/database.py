@@ -69,19 +69,41 @@ def _run_migrations():
 
 
 def _backfill_series() -> None:
-    """Parse series name + position from book titles for any books not yet tagged."""
+    """Parse series name + position from book titles.
+
+    Re-parses every book whose title has a parens suffix so that a parser
+    upgrade (e.g. the subseries-stripping fix) can correct existing data.
+    Idempotent — only writes when the parsed value differs from current.
+
+    Also sweeps orphan series_catalog rows left behind by the old buggy
+    parser (rows where the series_key contains `, #` or `;`, signalling
+    a captured subseries notation) — but only if they're not manually
+    curated by the user.
+    """
     from ingest.series import parse_series
+    from db.models import SeriesCatalog
+    from sqlalchemy import or_
+
     db = SessionLocal()
     try:
-        books = db.query(Book).filter(
-            Book.series_name.is_(None),
-            Book.title.like('%(%'),
-        ).all()
+        books = db.query(Book).filter(Book.title.like('%(%')).all()
         for b in books:
             name, pos = parse_series(b.title)
-            if name:
+            if name and (b.series_name != name or b.series_position != pos):
                 b.series_name = name
                 b.series_position = pos
+        db.commit()
+
+        # Sweep orphan catalog rows from the old buggy parser. The shape
+        # of those keys is "<primary>, #N; <subseries>" — they all contain
+        # ", #" or ";". Leave manually-curated rows alone.
+        db.query(SeriesCatalog).filter(
+            or_(
+                SeriesCatalog.series_key.like('%, #%'),
+                SeriesCatalog.series_key.like('%;%'),
+            ),
+            SeriesCatalog.manually_curated.is_not(True),
+        ).delete(synchronize_session=False)
         db.commit()
     finally:
         db.close()
