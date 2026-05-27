@@ -40,7 +40,7 @@ export function ViewShelves({ books }: Props) {
       </SectionTitle>
 
       {/* Main shelf counts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Stat label="Read" value={nfmt(readCount)} size="xl" />
         <Stat label="Currently reading" value={nfmt(crCount)} size="xl" />
         <Stat label="To read" value={nfmt(trCount)} size="xl" />
@@ -48,7 +48,7 @@ export function ViewShelves({ books }: Props) {
 
       {/* Custom shelves */}
       {customShelves.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
           <Card title="Custom shelves" eyebrow="Top 20">
             <HBar items={shelfBarData} color="var(--accent-2)" />
           </Card>

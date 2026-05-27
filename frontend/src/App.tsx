@@ -21,6 +21,7 @@ import { ViewSettings }  from './views/ViewSettings'
 import { ViewLogin }     from './views/ViewLogin'
 import { ViewAdmin }     from './views/ViewAdmin'
 import { NavigationContext } from './context'
+import { useViewport } from './hooks/useViewport'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } },
@@ -55,22 +56,28 @@ const GRAN_OPTIONS: { id: Granularity; label: string }[] = [
   { id: 'year',  label: 'Yearly'  },
 ]
 
-function SideNav({ view, setView, books, theme, setTheme }: {
+function SideNav({ view, setView, books, theme, setTheme, isMobile, onNavigate }: {
   view: ViewId
   setView: (v: ViewId) => void
   books: Book[]
   theme: Theme
   setTheme: (t: Theme) => void
+  isMobile: boolean
+  onNavigate?: () => void
 }) {
   const { user, logout } = useAuth()
   const readCount = books.filter(b => b.exclusive_shelf === 'read').length
 
+  // Mobile drawer is full-height inside its container; on desktop we
+  // pin it to the viewport with `position: sticky`.
   return (
     <aside style={{
       borderRight: '1px solid var(--line)', background: 'var(--paper)',
-      padding: '32px 24px 32px', position: 'sticky', top: 0,
-      height: '100vh', display: 'flex', flexDirection: 'column', flexShrink: 0,
-      width: 220, overflow: 'hidden',
+      padding: isMobile ? '24px 20px' : '32px 24px 32px',
+      position: isMobile ? 'static' : 'sticky', top: 0,
+      height: isMobile ? '100%' : '100vh',
+      display: 'flex', flexDirection: 'column', flexShrink: 0,
+      width: isMobile ? '100%' : 220, overflow: 'auto',
     }}>
       <div style={{ paddingBottom: 28, borderBottom: '1px solid var(--line)', position: 'relative' }}>
         <div style={{ display: 'flex', gap: 2, height: 20, marginBottom: 10, alignItems: 'flex-end' }}>
@@ -96,10 +103,10 @@ function SideNav({ view, setView, books, theme, setTheme }: {
 
       <nav style={{ flex: 1, paddingTop: 24 }}>
         {NAV.map(item => (
-          <button key={item.id} onClick={() => setView(item.id)} style={{
+          <button key={item.id} onClick={() => { setView(item.id); onNavigate?.() }} style={{
             display: 'grid', gridTemplateColumns: '22px 1fr',
             width: '100%', textAlign: 'left',
-            padding: '10px 4px', border: 'none',
+            padding: isMobile ? '14px 4px' : '10px 4px', border: 'none',
             background: 'transparent', cursor: 'pointer',
             fontFamily: 'inherit',
             borderBottom: '1px solid var(--line-soft)',
@@ -109,42 +116,42 @@ function SideNav({ view, setView, books, theme, setTheme }: {
             <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>
               {item.no}
             </span>
-            <span style={{ fontSize: 13.5 }}>{item.label}</span>
+            <span style={{ fontSize: isMobile ? 15 : 13.5 }}>{item.label}</span>
           </button>
         ))}
-        <button onClick={() => setView('import')} style={{
+        <button onClick={() => { setView('import'); onNavigate?.() }} style={{
           display: 'grid', gridTemplateColumns: '22px 1fr',
           width: '100%', textAlign: 'left',
-          padding: '10px 4px', border: 'none',
+          padding: isMobile ? '14px 4px' : '10px 4px', border: 'none',
           background: 'transparent', cursor: 'pointer',
           fontFamily: 'inherit', marginTop: 8,
           color: view === 'import' ? 'var(--ink)' : 'var(--muted)',
         }}>
           <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>⊕</span>
-          <span style={{ fontSize: 13.5 }}>Import data</span>
+          <span style={{ fontSize: isMobile ? 15 : 13.5 }}>Import data</span>
         </button>
-        <button onClick={() => setView('settings')} style={{
+        <button onClick={() => { setView('settings'); onNavigate?.() }} style={{
           display: 'grid', gridTemplateColumns: '22px 1fr',
           width: '100%', textAlign: 'left',
-          padding: '10px 4px', border: 'none',
+          padding: isMobile ? '14px 4px' : '10px 4px', border: 'none',
           background: 'transparent', cursor: 'pointer',
           fontFamily: 'inherit', marginTop: 2,
           color: view === 'settings' ? 'var(--ink)' : 'var(--muted)',
         }}>
           <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>⚙</span>
-          <span style={{ fontSize: 13.5 }}>Settings</span>
+          <span style={{ fontSize: isMobile ? 15 : 13.5 }}>Settings</span>
         </button>
         {user?.is_admin && (
-          <button onClick={() => setView('admin')} style={{
+          <button onClick={() => { setView('admin'); onNavigate?.() }} style={{
             display: 'grid', gridTemplateColumns: '22px 1fr',
             width: '100%', textAlign: 'left',
-            padding: '10px 4px', border: 'none',
+            padding: isMobile ? '14px 4px' : '10px 4px', border: 'none',
             background: 'transparent', cursor: 'pointer',
             fontFamily: 'inherit', marginTop: 2,
             color: view === 'admin' ? 'var(--ink)' : 'var(--muted)',
           }}>
             <span className="mono" style={{ fontSize: 9.5, letterSpacing: '0.06em', color: 'var(--muted)', paddingTop: 3 }}>★</span>
-            <span style={{ fontSize: 13.5 }}>Admin</span>
+            <span style={{ fontSize: isMobile ? 15 : 13.5 }}>Admin</span>
           </button>
         )}
       </nav>
@@ -184,19 +191,22 @@ function SideNav({ view, setView, books, theme, setTheme }: {
   )
 }
 
-function Header({ range, setRange, granularity, setGranularity }: {
+function Header({ range, setRange, granularity, setGranularity, isMobile }: {
   range: Range
   setRange: (r: Range) => void
   granularity: Granularity
   setGranularity: (g: Granularity) => void
+  isMobile: boolean
 }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      marginBottom: 48, paddingBottom: 20, borderBottom: '1px solid var(--line)',
+      marginBottom: isMobile ? 28 : 48,
+      paddingBottom: isMobile ? 14 : 20,
+      borderBottom: '1px solid var(--line)',
     }}>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-        <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: isMobile ? 10 : 16, alignItems: 'center', flexWrap: 'wrap', rowGap: 8 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {RANGE_OPTIONS.map(o => (
             <button key={o.id} onClick={() => setRange(o.id)} style={{
               padding: '5px 10px', fontSize: 12, borderRadius: 2,
@@ -209,7 +219,7 @@ function Header({ range, setRange, granularity, setGranularity }: {
           ))}
         </div>
 
-        <div style={{ width: 1, height: 18, background: 'var(--line)' }} />
+        {!isMobile && <div style={{ width: 1, height: 18, background: 'var(--line)' }} />}
 
         <div style={{ display: 'flex', gap: 4 }}>
           {GRAN_OPTIONS.map(o => (
@@ -230,14 +240,25 @@ function Header({ range, setRange, granularity, setGranularity }: {
 
 function AppShell() {
   const { user } = useAuth()
+  const { isMobile } = useViewport()
   const [view,        setView]        = useState<ViewId>('overview')
   const [range,       setRange]       = useState<Range>('all')
   const [granularity, setGranularity] = useState<Granularity>('year')
   const [theme,       setTheme]       = useState<Theme>('paper')
   const [bookSearch,  setBookSearch]  = useState('')
+  const [drawerOpen,  setDrawerOpen]  = useState(false)
 
   useEffect(() => { window.scrollTo(0, 0) }, [view])
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme) }, [theme])
+
+  // Lock body scroll when the mobile drawer is open
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [drawerOpen])
+
+  // Auto-close drawer if viewport widens past the mobile breakpoint
+  useEffect(() => { if (!isMobile) setDrawerOpen(false) }, [isMobile])
 
   const { data: books = [], isLoading, error } = useQuery({
     queryKey: ['books'],
@@ -268,28 +289,104 @@ function AppShell() {
 
   const navigateToAuthor = (name: string) => { setBookSearch(name); setView('books') }
 
+  // Reusable view-switch JSX
+  const viewContent = (
+    <>
+      {view === 'overview'  && <ViewOverview  books={books} range={range} granularity={granularity} />}
+      {view === 'timeline'  && <ViewTimeline  books={books} range={range} granularity={granularity} />}
+      {view === 'shelves'   && <ViewShelves   books={books} />}
+      {view === 'authors'   && <ViewAuthors   books={books} range={range} />}
+      {view === 'genres'    && <ViewGenres    books={books} range={range} />}
+      {view === 'ratings'   && <ViewRatings   books={books} range={range} granularity={granularity} />}
+      {view === 'books'     && <ViewBooks     books={books} initialSearch={bookSearch} onSearchClear={() => setBookSearch('')} />}
+      {view === 'recommend' && <ViewRecommend />}
+      {view === 'discover'  && <ViewDiscover />}
+      {view === 'insights'  && <ViewInsights />}
+      {view === 'series'    && <ViewSeries />}
+      {view === 'import'    && <ViewImport />}
+      {view === 'settings'  && <ViewSettings  theme={theme} setTheme={setTheme} />}
+      {view === 'admin'     && <ViewAdmin />}
+    </>
+  )
+
+  if (isMobile) {
+    const currentLabel = NAV.find(n => n.id === view)?.label
+      ?? (view === 'import' ? 'Import data' : view === 'settings' ? 'Settings' : view === 'admin' ? 'Admin' : '')
+    return (
+      <NavigationContext.Provider value={{ navigateToAuthor }}>
+        {/* Top bar */}
+        <header style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--line)',
+          background: 'var(--paper)',
+          position: 'sticky', top: 0, zIndex: 30,
+        }}>
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation"
+            style={{
+              width: 40, height: 40, padding: 0,
+              border: '1px solid var(--line)', borderRadius: 4,
+              background: 'transparent', color: 'var(--ink)',
+              cursor: 'pointer', fontSize: 20, lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'inherit',
+            }}
+          >
+            ☰
+          </button>
+          <div className="serif" style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 600, lineHeight: 1 }}>
+            ShelfLife
+          </div>
+          <div style={{ flex: 1 }} />
+          <div className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>{currentLabel}</div>
+        </header>
+
+        {/* Slide-out drawer + backdrop */}
+        {drawerOpen && (
+          <>
+            <div
+              onClick={() => setDrawerOpen(false)}
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+                zIndex: 40, animation: 'fadeIn 150ms ease',
+              }}
+            />
+            <div style={{
+              position: 'fixed', top: 0, left: 0, bottom: 0,
+              width: 'min(85vw, 320px)',
+              background: 'var(--paper)', zIndex: 50,
+              boxShadow: '4px 0 24px -8px rgba(0,0,0,0.3)',
+              animation: 'slideIn 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+              display: 'flex', flexDirection: 'column',
+            }}>
+              <SideNav
+                view={view} setView={setView} books={books}
+                theme={theme} setTheme={setTheme}
+                isMobile={true}
+                onNavigate={() => setDrawerOpen(false)}
+              />
+            </div>
+          </>
+        )}
+
+        <main style={{ padding: '20px 16px 80px' }}>
+          <Header range={range} setRange={setRange} granularity={granularity} setGranularity={setGranularity} isMobile />
+          {viewContent}
+        </main>
+      </NavigationContext.Provider>
+    )
+  }
+
   return (
     <NavigationContext.Provider value={{ navigateToAuthor }}>
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', minHeight: '100vh' }}>
-      <SideNav view={view} setView={setView} books={books} theme={theme} setTheme={setTheme} />
+      <SideNav view={view} setView={setView} books={books} theme={theme} setTheme={setTheme} isMobile={false} />
 
       <main style={{ padding: '36px 56px 120px', maxWidth: 1480, overflow: 'hidden' }}>
-        <Header range={range} setRange={setRange} granularity={granularity} setGranularity={setGranularity} />
-
-        {view === 'overview'  && <ViewOverview  books={books} range={range} granularity={granularity} />}
-        {view === 'timeline'  && <ViewTimeline  books={books} range={range} granularity={granularity} />}
-        {view === 'shelves'   && <ViewShelves   books={books} />}
-        {view === 'authors'   && <ViewAuthors   books={books} range={range} />}
-        {view === 'genres'    && <ViewGenres    books={books} range={range} />}
-        {view === 'ratings'   && <ViewRatings   books={books} range={range} granularity={granularity} />}
-        {view === 'books'     && <ViewBooks     books={books} initialSearch={bookSearch} onSearchClear={() => setBookSearch('')} />}
-        {view === 'recommend' && <ViewRecommend />}
-        {view === 'discover'  && <ViewDiscover />}
-        {view === 'insights'  && <ViewInsights />}
-        {view === 'series'    && <ViewSeries />}
-        {view === 'import'    && <ViewImport />}
-        {view === 'settings'  && <ViewSettings  theme={theme} setTheme={setTheme} />}
-        {view === 'admin'     && <ViewAdmin />}
+        <Header range={range} setRange={setRange} granularity={granularity} setGranularity={setGranularity} isMobile={false} />
+        {viewContent}
       </main>
     </div>
     </NavigationContext.Provider>

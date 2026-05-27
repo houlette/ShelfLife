@@ -80,13 +80,13 @@ export function ViewAuthors({ books, range }: Props) {
         Authors
       </SectionTitle>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Stat label="Unique authors" value={nfmt(uniqueAuthors)} size="xl" />
         <Stat label="Repeat authors" value={nfmt(repeatAuthors.length)} size="xl" sub={`${repeatAuthors.length ? Math.round(repeatAuthors.length / uniqueAuthors * 100) : 0}% of authors`} />
         <Stat label="One-book wonders" value={nfmt(oneBookWonders.length)} size="xl" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Card title="Most-read authors" eyebrow="Top 15">
           <HBar items={topBarData} color="var(--accent)" />
         </Card>
@@ -429,7 +429,7 @@ function DiversitySection({ books, readBooks }: { books: Book[]; readBooks: Book
       )}
 
       {progress && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 16, marginBottom: 32 }}>
           {[
             { label: 'Authors searched', value: progress.authors_processed },
             { label: 'Authors enriched', value: progress.authors_enriched },

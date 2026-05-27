@@ -470,7 +470,7 @@ export function ViewSeries() {
       </SectionTitle>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 32 }}>
         <StatCard label="Series in library" value={totalSeries} />
         <StatCard label="Complete" value={completedCount} />
         <StatCard label="In progress" value={inProgressCount} />

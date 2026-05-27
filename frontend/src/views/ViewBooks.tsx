@@ -127,47 +127,52 @@ export function ViewBooks({ books, initialSearch, onSearchClear }: Props) {
         </div>
       )}
 
-      {/* Table header */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '44px 1fr 140px 110px 90px 60px 70px 90px',
-        gap: 12, padding: '8px 0', borderBottom: '2px solid var(--line)',
-        alignItems: 'end',
-      }}>
-        <span></span>
-        {colHead('Title', 'title')}
-        {colHead('Author', 'author')}
-        <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Genre</span>
-        {colHead('Rating', 'rating')}
-        {colHead('Published', 'year', { textAlign: 'right' })}
-        {colHead('Pages', 'pages', { textAlign: 'right' })}
-        {colHead('Read', 'date', { textAlign: 'right' })}
-      </div>
+      {/* Wide table — wrap in a horizontal scroll container for narrow viewports */}
+      <div style={{ overflowX: 'auto', marginInline: -4 }}>
+        <div style={{ minWidth: 680, paddingInline: 4 }}>
+          {/* Table header */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '44px 1fr 140px 110px 90px 60px 70px 90px',
+            gap: 12, padding: '8px 0', borderBottom: '2px solid var(--line)',
+            alignItems: 'end',
+          }}>
+            <span></span>
+            {colHead('Title', 'title')}
+            {colHead('Author', 'author')}
+            <span style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>Genre</span>
+            {colHead('Rating', 'rating')}
+            {colHead('Published', 'year', { textAlign: 'right' })}
+            {colHead('Pages', 'pages', { textAlign: 'right' })}
+            {colHead('Read', 'date', { textAlign: 'right' })}
+          </div>
 
-      {/* Rows */}
-      {paged.map(b => (
-        <div key={b.id} style={{
-          display: 'grid', gridTemplateColumns: '44px 1fr 140px 110px 90px 60px 70px 90px',
-          gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line-soft)',
-          alignItems: 'center',
-        }}>
-          <BookCover src={b.cover_url} title={b.title} width={32} height={48} />
-          <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
-            <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
-          <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.genre ?? '—'}</div>
-          <div><RatingStars rating={b.my_rating} size={10} /></div>
-          <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
-            {b.original_pub_year ?? b.year_published ?? '—'}
-          </div>
-          <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
-            {b.num_pages ? nfmt(b.num_pages) : '—'}
-          </div>
-          <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
-            {effectiveDate(b) ?? '—'}
-          </div>
+          {/* Rows */}
+          {paged.map(b => (
+            <div key={b.id} style={{
+              display: 'grid', gridTemplateColumns: '44px 1fr 140px 110px 90px 60px 70px 90px',
+              gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line-soft)',
+              alignItems: 'center',
+            }}>
+              <BookCover src={b.cover_url} title={b.title} width={32} height={48} />
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.3 }}>
+                <a className="book-link" href={goodreadsUrl(b.goodreads_book_id)} target="_blank" rel="noreferrer">{b.title}</a>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}><AuthorLink author={b.author} /></div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.genre ?? '—'}</div>
+              <div><RatingStars rating={b.my_rating} size={10} /></div>
+              <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+                {b.original_pub_year ?? b.year_published ?? '—'}
+              </div>
+              <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+                {b.num_pages ? nfmt(b.num_pages) : '—'}
+              </div>
+              <div className="num" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'right' }}>
+                {effectiveDate(b) ?? '—'}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
