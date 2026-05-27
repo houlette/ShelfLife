@@ -39,7 +39,7 @@ export function ViewGenres({ books, range }: Props) {
         Genres
       </SectionTitle>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Stat label="Genres" value={nfmt(genres.filter(g => g.genre !== 'Unclassified').length)} size="lg" />
         <Stat
           label="Top genre"
@@ -57,7 +57,7 @@ export function ViewGenres({ books, range }: Props) {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Card title="Books by genre" eyebrow="Lifetime">
           <HBar items={barData} />
         </Card>

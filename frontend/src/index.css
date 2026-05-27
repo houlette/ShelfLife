@@ -126,3 +126,19 @@ a.book-link:hover { text-decoration: underline; text-decoration-color: var(--mut
 *::-webkit-scrollbar        { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb  { background: var(--line); border-radius: 6px; }
 *::-webkit-scrollbar-track  { background: transparent; }
+
+/* ─── Animations ────────────────────────────────────────────────────────── */
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Responsive helpers ────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Pad SVG/chart wrappers a little less aggressively on small screens */
+  body { font-size: 14px; }
+}

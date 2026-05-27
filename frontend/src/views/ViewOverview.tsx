@@ -42,14 +42,14 @@ export function ViewOverview({ books, range, granularity }: Props) {
       </SectionTitle>
 
       {/* Hero stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Stat label="Books read" value={nfmt(filtered.length)} size="lg" sub={undatedCount > 0 ? `${nfmt(undatedCount)} without read date` : undefined} />
         <Stat label="Pages" value={nfmt(totalPages)} size="lg" />
         <Stat label="Authors" value={nfmt(uniqueAuthors)} size="lg" />
         <Stat label="Avg rating" value={avgRating != null ? avgRating.toFixed(1) : null} unit="/5" size="lg" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         {/* Rating distribution */}
         <Card title="Rating distribution" eyebrow="Your ratings" style={{ minWidth: 0 }}>
           <HBar items={ratingDist} />

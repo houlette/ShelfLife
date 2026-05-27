@@ -76,7 +76,7 @@ export function ViewRatings({ books, range, granularity }: Props) {
         <Stat label="1-star books" value={nfmt(oneStars.length)} size="xl" sub={rated.length ? `${Math.round(oneStars.length / rated.length * 100)}% of rated` : undefined} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         <Card title="Your rating distribution" eyebrow="How you rate">
           <HBar items={ratingDist} />
         </Card>

@@ -135,7 +135,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
         </Card>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         {/* Cumulative */}
         <Card title="Cumulative books read" eyebrow={undatedCount > 0 ? `${nfmt(datedCount)} of ${nfmt(filtered.length)} have a read date` : 'Running total'} style={{ minWidth: 0 }}>
           <LineChart data={cumulativeData} y="cumulative" height={200} color="var(--accent)" area smoothWindow={1} />
@@ -175,7 +175,7 @@ export function ViewTimeline({ books, range, granularity }: Props) {
       {/* ── Reading patterns ─────────────────────────────────────────────── */}
       {datedBooks.length > 0 && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
             <Card title="Books finished by month" eyebrow="Seasonality · all time" style={{ minWidth: 0 }}>
               <BarChart data={byMonthOfYear} height={160} color="var(--accent-3)" />
             </Card>
