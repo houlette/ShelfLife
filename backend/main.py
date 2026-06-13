@@ -16,7 +16,7 @@ app = FastAPI(title="ShelfLife API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174", "http://localhost:5175", "http://localhost:4174"],
+    allow_origins=["http://localhost:5250", "http://localhost:5255"],  # dev + preview, per ~/Documents/Projects/PORTS.md
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

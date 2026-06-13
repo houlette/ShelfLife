@@ -2,7 +2,7 @@
 # ShelfLife launcher — PROJECT path is substituted at build time by build-app.sh
 PROJECT="__PROJECT__"
 PYTHON="$PROJECT/.venv/bin/python3"
-PORT=8001
+PORT=5252  # ShelfLife block per ~/Documents/Projects/PORTS.md
 PIDFILE="$PROJECT/.shelflife.pid"
 LOG="$PROJECT/.shelflife.log"
 
